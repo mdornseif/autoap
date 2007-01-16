@@ -37,8 +37,10 @@ authstring="AutoAP, by JohnnyPrimus - lee@partners.biz - 2007-01-15 23:01 GMT"  
 #
 #  2007-01-15
 # - major overhaul aap_scanman and aap_joinpref
-# - connection to wep-networks working now, however still sketchy
+# - connection to wep-networks working now
 # - you can have both wep and open search enabled separately or together
+# - no need for the subdir autoap/wep anymore
+# - dhcp is safer now
 #
 
 ME=`basename $0`
@@ -195,18 +197,25 @@ aaping ()
 	fi
 }
 
+# try to join a network. 
+# aajoin <network> [wepkey]
 aajoin ()
 {
 if [ -n "$2" ]; then 
+  aaplog 3 aajoin - Trying to connect to ${1}, with wep key ${2}.
   wl join "$1" key "$2"
 else
+  aaplog 3 aajoin - Trying to connect to ${1}
   wl join "$1"
 fi
-sleep 1
-kill -USR2 `cat /tmp/var/run/udhcpc.pid`  2> /dev/null
-killall udhcpc 2> /dev/null
-udhcpc  -i eth1 -p /tmp/var/run/udhcpc.pid -s /tmp/udhcpc 2> /dev/null 
+sleep 2
+kill -USR2 `cat /tmp/var/run/udhcpc.pid` > /dev/null 2>&1
+killall udhcpc > /dev/null 2>&1
+udhcpc  -i eth1 -p /tmp/var/run/udhcpc.pid -s /tmp/udhcpc > /dev/null 2>&1 &
+sleep $aap_dhcpw
 cur_ssid=$(wl assoc|head -n1|sed s/^.*:.\"//|sed s/\"$//)
+#  aaplog 3 aajoin - GW: $(ip route | awk '/default via/ {print $3}'), SSID: ${cur_ssid}
+
 }
 
 ################### Start AutoAP ###########################
@@ -233,55 +242,25 @@ if [ "$wl_mode" = "1" ]; then
 	exit 0
 fi
 
+if [ "$(nvram get wan_proto)" = "static" ]; then
+	aaplog 4 init_scan - Router is not in DHCP mode.  Setting DHCP mode.
+	nvram set wan_proto="dhcp"
+	nvram commit
+fi
+
 ## Initialize scans
 aap_init_scan ()
 {
 	wl scan > /dev/null 2>&1 && wl scanresults > /tmp/aap.result
-	if [ "$ap_good" = "1" ]; then
-		ap_good=0
-	  aaplog 6 init_scan - Sleeping for ${aap_scanfreq} seconds.
-	  sleep $aap_scanfreq
-	  aap_checkjoin "$tPref"
+	if [ $(cat /tmp/aap.result | wc -l) -gt 2 ]; then
+		current_ap=1
+		aaplog 5 init_scan - Retrieved new scan data.
+		firstRun=0
+		aap_scanman
 	else
-		if [ "$firstRun" = "1" ] || [ -z $(nvram get wan_gateway) ]; then
-			if [ $(cat /tmp/aap.result | wc -l) -gt 2 ]; then
-				current_ap=1
-				aaplog 5 init_scan - Retrieved new scan data.
-				firstRun=0
-				aap_scanman
-			else
-				aaplog 5 init_scan - Scan failed.  Retrying initial scan.
-				sleep 3
-			fi
-		else
-			cur_wip=$(ifconfig `nvram get wl0_ifname`|awk 'NR==2{print $2}'|sed s!addr:!!)
-			sleep 1
-			if [ "$cur_wip" = "0.0.0.0" ]; then
-				aaplog 4 init_scan - WAN IP address invalid.
-				if [ "$(nvram get wan_proto)" = "static" ]; then #todo: this may go into header
-					aaplog 4 init_scan - Router is not in DHCP mode.  Setting DHCP mode.
-					nvram set wan_proto="dhcp"
-					nvram commit
-					kill -SIGTERM `cat /tmp/var/run/udhcpc.pid`
-					rm -f /tmp/*.expires
-					ln -sf /sbin/rc /tmp/udhcpc
-					sleep 1
-					udhcpc -i eth1 -p /var/run/udhcpc.pid -s /tmp/udhcpc -H $(nvram get wan_hostname) > /dev/null 2>&1
-					sleep 1
-				fi
-				if [ -s /tmp/var/run/udhcpc.pid ]; then
-				  aaplog 4 init_scan - DHCP client successfully started for WAN device.
-			    aap_checkjoin "$tPref"
-			    aaplog 7 init_scan - Awake.  Checking connection via init_scan.
-        else
-          aaplog 2 init_scan - Could not start dhcp client.  Reinitializing.
-        fi
-      else
-			  aap_checkjoin "$tPref"
-			  aaplog 7 init_scan - Awake.  Checking connection via init_scan.
-	    fi
-    fi
-	fi	
+		aaplog 5 init_scan - Scan failed.  Retrying initial scan.
+		sleep 3
+	fi
 }
 
 ## Scanman performs all of the parsing and filter
@@ -323,7 +302,7 @@ aap_scanman ()
 						if [ $cSNR -gt 2 ]; then
 							[ $cSNR -lt 10 ] && cSNR="0${cSNR}";
 							if [ "$aap_findwep" = "1" ] && [ "$net_type" = "wep" ]; then
-								echo "$cSNR $cSSID $cBSSID $cCHAN" | sed s!^\(.-\)!0\1! > $aaptmpdir/${cSNR}wep-$cSSID
+								echo "$cSNR $cSSID $cBSSID $cCHAN" | sed s!^\(.-\)!0\1! > $aaptmpdir/${cSNR}aawep-$cSSID
 								aaplog 2 scanman - Found WEP network ${cSSID}. \(BSSID\: ${cBSSID},  Signal\: ${cSNR}dB\) 
 							elif [ "$aap_findopen" = "1" ] && [ "$net_type" = "open" ]; then
 								echo "$cSNR $cSSID $cBSSID $cCHAN" | sed s!^\(.-\)!0\1! > $aaptmpdir/${cSNR}${cSSID}
@@ -347,7 +326,7 @@ aap_joinpref ()
   while [ $current_ap -le $aap_aplimit ] && [ $current_ap -le $ap_dir_limit ]; do
     wl disassoc > /dev/null 2>&1
     tPref=$(ls -1 $aaptmpdir | grep -v log | sort -r | head -n$((${current_ap})) | tail -n1 | sed 's!^..!!')
-    twPref=`echo "$tPref" | sed 's/^wep-//'`
+    twPref=`echo "$tPref" | sed 's/^aawep-//'`
     if [ "$tPref" != "$twPref"  ]; then
       wepnet=1
       tPref="$twPref"
@@ -368,18 +347,14 @@ aap_joinpref ()
 		if [ "$wepnet" = "1" ]; then
 				wl wsec 1 2>/dev/null
       for wlkey in $aap_wepkeys; do
-				aaplog 4 joinpref - Trying to join ${tPref}.  Using WEP key $wlkey 
 			  aajoin "$tPref"  $wlkey 
-        if [ "$tPref" = "$cur_ssid" ]; then
-			    aajoin "$tPref"  $wlkey 
-          [ "$tPref" = "$cur_ssid" ] && break # found good key
-        fi
+        [ -n "$(ip route | awk '/default via/ {print $3}')" ] && break # found good key
       done
-      if [ "$tPref" != "$cur_ssid" ]; then
+      if [ -n "$(ip route | awk '/default via/ {print $3}')" ]; then
+		    aaplog 5 joinpref - found matching key, connecting ... 
+      else
 		    aaplog 5 joinpref - no matching key, moving to next network 
         continue 
-      else
-		    aaplog 5 joinpref - found matching key, connecting ... 
       fi
 		fi
 		if [ "$wepnet" = "0" ]; then
