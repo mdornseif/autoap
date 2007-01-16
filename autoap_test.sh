@@ -1,7 +1,7 @@
 #!/bin/sh
 #########################################################################################
 ##                                                                                     ##
-##  AutoAP, by JohnnyPrimus - lee@partners.biz - 2007-01-15 20:11 GMT                  ##
+authstring="AutoAP, by JohnnyPrimus - lee@partners.biz - 2007-01-15 23:01 GMT"         ##
 ##                                                                                     ##
 ##  autoap is a small addition for the already robust DD-WRT firmware that enables     ##
 ##  users to migrate through/over many different wireless hotspots with low impact     ##
@@ -38,7 +38,8 @@
 #  2007-01-15
 # - major overhaul aap_scanman and aap_joinpref
 # - connection to wep-networks working now, however still sketchy
-# - right now either wep or open networks can be enabled, not both together
+# - you can have both wep and open search enabled separately or together
+#
 
 ME=`basename $0`
 RUNNING=`ps | grep $ME | wc -l`
@@ -48,8 +49,7 @@ if [ "$RUNNING" -gt 3 ]; then
 fi
 
 aaptmpdir="/tmp/autoap"
-aapwmpdir="/tmp/autoap/wep"
-rm -f $aaptmpdir/*
+rm -rf $aaptmpdir/*
 mkdir -p $aaptmpdir
 rm -f /tmp/aap.result
 
@@ -66,7 +66,6 @@ aap_findwep="0"
 [ -n "$(nvram get autoap_findopen)" ] && aap_findopen="$(nvram get autoap_findopen)";
 [ -n "$(nvram get autoap_findwep)" ] && aap_findwep="$(nvram get autoap_findwep)";
 
-mkdir -p $aaptmpdir/wep; # the 'wep' dir is created in any case to avoid confusion of the number of networks.
 
 ######  Logging.  Default is log to syslog.
 ######  AutoAP can log to syslog, or to a file. Valid options are
@@ -125,15 +124,15 @@ aap_scanfreq="60"
 [ -n "$(nvram get autoap_macfilter)" ] && aap_ignmacs="$(nvram get autoap_macfilter)";
 
 ############### SSID Ignore List ##########################################
-## Like the MAC filter, this is a space seperated list stored in nvram,   # 
+## Like the MAC filter, this is a space separated list stored in nvram,   # 
 ## and will prevent autoap from connecting to any SSID you designate.     #
 ## nvram set autoap_ssidfilter="ssid1 ssid2 etc"                          # 
 ##                                                                        #
 ###########################################################################
 [ -n "$(nvram get autoap_ssidfilter)" ] && aap_ignssid="$(nvram get autoap_ssidfilter)";
 
-######  Length of time to wait for a DHCP request to succeed.  Default 15
-##  nvram set autoap_dhcpw="15"
+######  Maximum number of lines of the logfile. Default 1000
+##  nvram set autoap_logsize="1000"
 ##
 aap_logsize="1000"
 [ -n "$(nvram get autoap_logsize)" ] && aap_logsize="$(nvram get autoap_logsize)";
@@ -196,6 +195,20 @@ aaping ()
 	fi
 }
 
+aajoin ()
+{
+if [ -n "$2" ]; then 
+  wl join "$1" key "$2"
+else
+  wl join "$1"
+fi
+sleep 1
+kill -USR2 `cat /tmp/var/run/udhcpc.pid`  2> /dev/null
+killall udhcpc 2> /dev/null
+udhcpc  -i eth1 -p /tmp/var/run/udhcpc.pid -s /tmp/udhcpc 2> /dev/null 
+cur_ssid=$(wl assoc|head -n1|sed s/^.*:.\"//|sed s/\"$//)
+}
+
 ################### Start AutoAP ###########################
 ##  Scanners, parsers, etc   
 ##	                        
@@ -204,22 +217,17 @@ firstRun=1
 current_ap=1
 wl_mode=`wl ap | awk '{ print \$3 }'`
 wl_if=`nvram get wl0_ifname`
-keynum=1
 tPref=""
+wl wsec 0 2>/dev/null
 
+aaplog 6 $authstring
 if [ "$aap_findwep" = "1" ]; then
 	if [ "$aap_wepkeys" = "" ]; then
 		aaplog 4 WEP keys not provided.  Switching to open only mode.
 		aap_findwep=0
 		aap_findopen=1
-	else
-		wl addwep 1 0000000000
-		wl primary_key 1
 	fi
 fi
-
-aaplog 6 AutoAP by JohnnyPrimus started. lee@partners.biz
-
 if [ "$wl_mode" = "1" ]; then
 	aaplog 3 FATAL - Router is in AP mode.  Exiting.
 	exit 0
@@ -263,9 +271,6 @@ aap_init_scan ()
 				fi
 				if [ -s /tmp/var/run/udhcpc.pid ]; then
 				  aaplog 4 init_scan - DHCP client successfully started for WAN device.
-				  killall -SIGUSR1 udhcpc > /dev/null 2>&1
-				  aaplog 6 init_scan - Waiting $aap_dhcpw for DHCP response.
-				  sleep $aap_dhcpw
 			    aap_checkjoin "$tPref"
 			    aaplog 7 init_scan - Awake.  Checking connection via init_scan.
         else
@@ -283,7 +288,6 @@ aap_init_scan ()
 ## logic, if the filter lists are configured. 
 aap_scanman ()
 {
-	aaplog 4 aap_scanman - enter scanlog
 	while read scanLine; do
 		lineID=$(expr substr "$scanLine" 1 4)
 		case "$lineID" in
@@ -303,9 +307,9 @@ aap_scanman ()
 						cBSSID=`echo $scanLine | awk '{ print \$2 }'`
 							for j in $aap_ignmacs; do 
 								if [ "$cBSSID" = "$j" ] || [ $net_type = "ignore" ]; then 
-									aaplog 4 bssid_filter - Ignoring SSID $cSSID with remote BSSID $cBSSID per user request.
-                  net_type=""
-                  break 2
+									aaplog 4 scanman - Ignoring SSID $cSSID with remote BSSID $cBSSID per user request.
+                  net_type="open"
+                  continue 2 
 								fi; done; 
 						cMODES=$(echo "$scanLine" | sed s!BSSID.*bility..!!)
             net_type="open"
@@ -314,25 +318,24 @@ aap_scanman ()
 								net_type="wpa"
 								aaplog 5 scanman - Skipping WPA protected network $cSSID.  
               fi 
-							[ "$k" = "WEP" ] && net_type="wep"
+							[ "$k" = "WEP" ] && net_type="wep";
             done
 						if [ $cSNR -gt 2 ]; then
-              cSNR0=${cSNR} # this is to avoid attaching multiple zeros 
-							[ $cSNR -lt 10 ] && cSNR0="0${cSNR}"
+							[ $cSNR -lt 10 ] && cSNR="0${cSNR}";
 							if [ "$aap_findwep" = "1" ] && [ "$net_type" = "wep" ]; then
-								echo "$cSNR0 $cSSID $cBSSID $cCHAN" | sed s!^\(.-\)!0\1\2\3! > $aaptmpdir/$cSNR0-$cSSID
-								aaplog 2 scanman - Found WEP network ${cSSID}. \(BSSID\: ${cBSSID},  Signal\: ${cSNR0}dB\) 
-							elif [ "$aap_findopen" = "1" ] && [ $net_type = "open" ]; then
-								echo "$cSNR0 $cSSID $cBSSID $cCHAN" | sed s!^\(.-\)!0\1\2\3! > $aaptmpdir/$cSNR0-$cSSID
-								aaplog 2 scanman - Found open network $cSSID. \(BSSID\: ${cBSSID},  Signal\: ${cSNR0}dB\)
+								echo "$cSNR $cSSID $cBSSID $cCHAN" | sed s!^\(.-\)!0\1! > $aaptmpdir/${cSNR}wep-$cSSID
+								aaplog 2 scanman - Found WEP network ${cSSID}. \(BSSID\: ${cBSSID},  Signal\: ${cSNR}dB\) 
+							elif [ "$aap_findopen" = "1" ] && [ "$net_type" = "open" ]; then
+								echo "$cSNR $cSSID $cBSSID $cCHAN" | sed s!^\(.-\)!0\1! > $aaptmpdir/${cSNR}${cSSID}
+								aaplog 2 scanman - Found open network $cSSID. \(BSSID\: ${cBSSID},  Signal\: ${cSNR}dB\)
 							else
-								aaplog 2 scanman - Skipping $net_type network $cSSID. \(BSSID\: ${cBSSID},  Signal\: ${cSNR0}dB\)
+								aaplog 2 scanman - Skipping $net_type network $cSSID. \(BSSID\: ${cBSSID},  Signal\: ${cSNR}dB\)
 							fi
             fi
 				;;
 		esac
 	done < /tmp/aap.result
-	ap_dir_limit="$(ls -1 /tmp/autoap | wc -l)"
+	ap_dir_limit="$(ls -1 $aaptmpdir | wc -l)"
 	aap_joinpref
 }
 
@@ -341,12 +344,18 @@ aap_scanman ()
 ## up the connection when a new AP is found. 
 aap_joinpref ()
 {
-  while [ $current_ap -le $aap_aplimit ] && [ $current_ap -lt $ap_dir_limit ]; do
+  while [ $current_ap -le $aap_aplimit ] && [ $current_ap -le $ap_dir_limit ]; do
     wl disassoc > /dev/null 2>&1
-    aaplog 4 joinpref - Moving to network $current_ap. 
-    tPref=$(ls -1 $aaptmpdir | grep -v log | sort -r | head -n$((${current_ap}+1)) | tail -n1 | sed s!^..-!!)
+    tPref=$(ls -1 $aaptmpdir | grep -v log | sort -r | head -n$((${current_ap})) | tail -n1 | sed 's!^..!!')
+    twPref=`echo "$tPref" | sed 's/^wep-//'`
+    if [ "$tPref" != "$twPref"  ]; then
+      wepnet=1
+      tPref="$twPref"
+    else
+      wepnet=0
+    fi
+    aaplog 4 joinpref - Moving to network $current_ap \($tPref\). 
     current_ap=$(($current_ap + 1))
-    aaplog 4 joinpref - Trying to join SSID ${tPref}.
     nvram set wl0_ssid=""
     nvram set wl_ssid=""
     nvram set wan_ipaddr="0.0.0.0"
@@ -356,19 +365,13 @@ aap_joinpref ()
     nvram set wan_lease="0"
     rm /tmp/get_lease_time
     rm /tmp/lease_time
-		if [ "$aap_findwep" = "1" ]; then
+		if [ "$wepnet" = "1" ]; then
 				wl wsec 1 2>/dev/null
       for wlkey in $aap_wepkeys; do
-			#	wl rmwep 1
-			#	wl addwep 1 $wlkey
 				aaplog 4 joinpref - Trying to join ${tPref}.  Using WEP key $wlkey 
-			  wl join "$tPref" key $wlkey > /dev/null 2>&1
-        sleep 5
-	      cur_ssid=$(wl assoc|head -n1|sed s/^.*:.\"//|sed s/\"$//)
+			  aajoin "$tPref"  $wlkey 
         if [ "$tPref" = "$cur_ssid" ]; then
-          wl join "$tPref" key $wlkey > /dev/null 2>&1
-          sleep 5
-	        cur_ssid=$(wl assoc|head -n1|sed s/^.*:.\"//|sed s/\"$//)
+			    aajoin "$tPref"  $wlkey 
           [ "$tPref" = "$cur_ssid" ] && break # found good key
         fi
       done
@@ -379,16 +382,16 @@ aap_joinpref ()
 		    aaplog 5 joinpref - found matching key, connecting ... 
       fi
 		fi
-		if [ "$aap_findopen" = "1" ]; then
+		if [ "$wepnet" = "0" ]; then
 			wl wsec 0 2>/dev/null
-			wl join "$tPref" > /dev/null 2>&1
-			sleep 2
+			aajoin "$tPref"
     fi
     aap_checkjoin "$tPref"
   done
   aaplog 4 joinpref - End of available APs.  Sleeping 15
   sleep 15
-	wlReset
+	rm -f $aaptmpdir/* 2>/dev/null
+	firstRun=1
 	current_ap=1
 }
 
@@ -398,31 +401,16 @@ aap_joinpref ()
 aap_checkjoin ()
 {
     req_ssid="$1"
-		cur_ssid=$(wl assoc|head -n1|sed s/^.*:.\"//|sed s/\"$//)
-		wlip=$(nvram get wan_gateway)
-		if [ ! "$req_ssid" = "$cur_ssid" ]  ; then # see if join worked otherwise retry twice
+		wlip=`ip route | awk '/default via/ {print $3}'`
+		if [ ! "$req_ssid" = "$cur_ssid" ] || [ $wlip = "0.0.0.0" ] ; then # see if join worked otherwise retry twice
 	    aaplog 3 checkjoin - Currently connected to "$cur_ssid", attempting to join "$req_ssid".
-		  wl join "$req_ssid" > /dev/null 2>&1
-		  sleep $aap_dhcpw
-		  cur_ssid=$(wl assoc|head -n1|sed s/^.*:.\"//|sed s/\"$//)
-		  if [ ! "$req_ssid" = "$cur_ssid" ]  ; then
+			aajoin "$req_ssid"
+		  wlip=`ip route | awk '/default via/ {print $3}'`
+		  if [ ! "$req_ssid" = "$cur_ssid" ] || [ $wlip = "0.0.0.0" ] ; then
 	      aaplog 3 checkjoin - Attempting again to join ${req_ssid}.
-		    wl join "$req_ssid" > /dev/null 2>&1
-		    sleep $aap_dhcpw
-		    cur_ssid=$(wl assoc|head -n1|sed s/^.*:.\"//|sed s/\"$//)
+			  aajoin "$req_ssid"
       fi
     fi
-		if [ $wlip = "0.0.0.0" ]; then # see if DHCP worked, otherwise retry twice
-     	aaplog 3 checkjoin - DHCP address from $cur_ssid is 0.0.0.0, attempting dhcp renewal.
-      killall -SIGUSR1 udhcpc > /dev/null 2>&1
-      sleep $aap_dhcpw
-		  wlip=$(nvram get wan_gateway)
-		  if [ $wlip = "0.0.0.0" ]; then 
-     	  aaplog 3 checkjoin - DHCP address still 0.0.0.0, attempting dhcp renewal.
-        killall -SIGUSR1 udhcpc > /dev/null 2>&1
-        sleep $aap_dhcpw
-      fi
-    fi 
 		if [ "$req_ssid" = "$cur_ssid" ] ; then 
       ap_good=$(aap_inet_chk)
     fi
@@ -462,8 +450,7 @@ aap_inet_chk ()
   if [ "$icret" = "1" ]; then
 	   echo "1" # connection valid
   else
-	  aaplog 4 inet_check - No connection detected, trying next available AP.
-	  echo "0"
+	  echo "0" # no connection
 	fi
 }
 
