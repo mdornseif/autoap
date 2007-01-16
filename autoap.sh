@@ -1,7 +1,7 @@
 #!/bin/sh
 #########################################################################################
 ##                                                                                     ##
-authstring="AutoAP, by JohnnyPrimus - lee@partners.biz - 2007-01-15 23:01 GMT"         ##
+authstring="AutoAP, by JohnnyPrimus - lee@partners.biz - 2007-01-16 18:01 GMT"         ##
 ##                                                                                     ##
 ##  autoap is a small addition for the already robust DD-WRT firmware that enables     ##
 ##  users to migrate through/over many different wireless hotspots with low impact     ##
@@ -35,7 +35,7 @@ authstring="AutoAP, by JohnnyPrimus - lee@partners.biz - 2007-01-15 23:01 GMT"  
 # - preserve HTML header when truncating logfile
 # - new nvram variable autoap_logsize (default 1000 lines)
 #
-#  2007-01-15
+#  2007-01-16
 # - major overhaul aap_scanman and aap_joinpref
 # - connection to wep-networks working now
 # - you can have both wep and open search enabled separately or together
