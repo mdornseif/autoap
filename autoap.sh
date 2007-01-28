@@ -42,6 +42,11 @@ authstring="AutoAP, by JohnnyPrimus - lee@partners.biz - 2007-01-16 18:01 GMT"  
 # - no need for the subdir autoap/wep anymore
 # - dhcp is safer now
 #
+#  2007-01-28
+# - add aap_logcurrsig.  invoking this function
+#   with no arugments will log the current signal
+#   strength of the active AP.
+#
 
 ME=`basename $0`
 RUNNING=`ps | grep $ME | wc -l`
@@ -175,6 +180,13 @@ aaplog ()
 	lcmd="${lc1}$p1${lc2}${ts}$* ";
 	[ "$aap_logger" = "html" ] && lcmd="${lc1}$p1${lc2}${ts}$* <br />";
 	runc=$($lcmd) 2>>$errredir
+}
+
+aap_logcurrsig ()
+{
+	wl rssi $(wl bssid); wl noise &&  sleep 2;
+	cPRE=$(echo `wl rssi $(wl bssid);wl noise`)
+	cSIG=`echo $cPRE|awk {'print \$1-\$2'}`
 }
 
 wlReset ()
