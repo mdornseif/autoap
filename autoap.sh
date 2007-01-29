@@ -1,7 +1,7 @@
 #!/bin/sh
 #########################################################################################
 ##                                                                                     ##
-authstring="AutoAP, by JohnnyPrimus - lee@partners.biz - 2007-01-16 18:01 GMT"         ##
+authstring="AutoAP, by JohnnyPrimus - lee@partners.biz - 2007-01-29 13:11 GMT"         ##
 ##                                                                                     ##
 ##  autoap is a small addition for the already robust DD-WRT firmware that enables     ##
 ##  users to migrate through/over many different wireless hotspots with low impact     ##
@@ -47,6 +47,7 @@ authstring="AutoAP, by JohnnyPrimus - lee@partners.biz - 2007-01-16 18:01 GMT"  
 #   with no arugments will log the current signal
 #   strength of the active AP.
 #
+# - some small tweaks for stability
 
 ME=`basename $0`
 RUNNING=`ps | grep $ME | wc -l`
@@ -225,7 +226,7 @@ kill -USR2 `cat /tmp/var/run/udhcpc.pid` > /dev/null 2>&1
 killall udhcpc > /dev/null 2>&1
 udhcpc  -i eth1 -p /tmp/var/run/udhcpc.pid -s /tmp/udhcpc > /dev/null 2>&1 &
 sleep $aap_dhcpw
-cur_ssid=$(wl assoc|head -n1|sed s/^.*:.\"//|sed s/\"$//)
+cur_ssid=$(wl ssid|sed s/^.*:.\"//|sed s/\"$//)
 #  aaplog 3 aajoin - GW: $(ip route | awk '/default via/ {print $3}'), SSID: ${cur_ssid}
 
 }
@@ -263,7 +264,8 @@ fi
 ## Initialize scans
 aap_init_scan ()
 {
-	wl scan > /dev/null 2>&1 && wl scanresults > /tmp/aap.result
+  wl wsec 0 2>/dev/null
+ 	wl scan > /dev/null 2>&1 && wl scanresults > /tmp/aap.result
 	if [ $(cat /tmp/aap.result | wc -l) -gt 2 ]; then
 		current_ap=1
 		aaplog 5 init_scan - Retrieved new scan data.
@@ -271,7 +273,7 @@ aap_init_scan ()
 		aap_scanman
 	else
 		aaplog 5 init_scan - Scan failed.  Retrying initial scan.
-		sleep 3
+		sleep $dhcpw
 	fi
 }
 
@@ -336,7 +338,6 @@ aap_scanman ()
 aap_joinpref ()
 {
   while [ $current_ap -le $aap_aplimit ] && [ $current_ap -le $ap_dir_limit ]; do
-    wl disassoc > /dev/null 2>&1
     tPref=$(ls -1 $aaptmpdir | grep -v log | sort -r | head -n$((${current_ap})) | tail -n1 | sed 's!^..!!')
     twPref=`echo "$tPref" | sed 's/^aawep-//'`
     if [ "$tPref" != "$twPref"  ]; then
@@ -375,8 +376,8 @@ aap_joinpref ()
     fi
     aap_checkjoin "$tPref"
   done
-  aaplog 4 joinpref - End of available APs.  Sleeping 15
-  sleep 15
+  aaplog 4 joinpref - End of available APs.  Sleeping $dhcpw
+  sleep $dhcpw
 	rm -f $aaptmpdir/* 2>/dev/null
 	firstRun=1
 	current_ap=1
@@ -405,6 +406,7 @@ aap_checkjoin ()
       aaplog 3 checkjoin - Connection to ${cur_ssid} with GW ${wlip} confirmed. Sleeping ${aap_scanfreq} seconds.
       sleep $aap_scanfreq
       ap_good=$(aap_inet_chk)
+      cur_ssid=$(wl ssid|sed s/^.*:.\"//|sed s/\"$//)
 	    if [ -n "$errredir" ] && [ $(cat $errredir | wc -l)  -gt $aap_logsize ]; then
         cp $errredir /tmp/tmplog
         `echo head -n2 /tmp/tmplog` > $errredir 
