@@ -61,6 +61,12 @@
 # - joinpref that have become prevelant in the past few releases.
 # - The detailed changelog is too long to fully list here, a code diff is available
 # - via the SVN interface at sourceforge.
+#
+#  2007-01-30
+# - Script updated to fix logger problem present in builds from recent
+# - svn checkouts of DD-WRT.  Also added two fixes from a version prior
+# - to the latest reversion (findopen and findwep were misnamed, prepended
+# - with aap_ )
 
 
 aaptmpdir="/tmp/autoap"
@@ -223,8 +229,8 @@ aaplog ()
 {
 	[ $# -gt 0 ] && p1="$1 " && shift;
 	ts=` /bin/date "+%Y-%m-%d %H:%M:%S "`
-	lcmd="${lc1}$p1${lc2}${ts}$* ";
-	[ "$aap_logger" = "html" ] && lcmd="${lc1}$p1${lc2}${ts}$* <br />";
+	lcmd="${lc1}$p1${lc2}${ts}\"$* \"";
+	[ "$aap_logger" = "html" ] && lcmd="${lc1}$p1${lc2}${ts}\"$* \"<br />";
 	runc=$($lcmd) 2>>$errredir
 }
 
