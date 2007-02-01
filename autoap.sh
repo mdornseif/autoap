@@ -67,7 +67,9 @@
 # - svn checkouts of DD-WRT.  Also added two fixes from a version prior
 # - to the latest reversion (findopen and findwep were misnamed, prepended
 # - with aap_ )
-
+#
+#  2007-01-30
+# - use 'wl ssid' insteatdof 'wl assoc', works also when connected automatically
 
 aaptmpdir="/tmp/autoap"
 aapwmpdir="/tmp/autoap/wep"
@@ -504,7 +506,7 @@ aap_joinpref ()
 aap_checkjoin ()
 {
 		req_ssid=$1
-		cur_ssid=$(wl assoc|head -n1|sed s/^.*:.\"//|sed s/\"$//)
+		cur_ssid=$(wl ssid|sed s/^.*:.\"//|sed s/\"$//)
 		wlip=$(nvram get wan_gateway)
 		if [ ! "$req_ssid" = "$cur_ssid" ] || [ "$wlip" = "0.0.0.0" ] ; then
 				if [ "$2" = "1" ]; then
