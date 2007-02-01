@@ -406,9 +406,9 @@ aap_scanman ()
 						cMODES=$(echo "$scanLine" | sed s!BSSID.*bility..!!)
 						for k in $cMODES; do
 							if [ "$k" = "WEP" ] || [ "$k" = "WPA" ]; then 
-								if [ "$k" = "WEP" ] && [ "$findwep" = "1" ]; then 
+								if [ "$k" = "WEP" ] && [ "$aap_findwep" = "1" ]; then 
 									newwep=1
-									[ "$findopen" = "0" ] && aaplog 5 scanman - Currently in WEP only mode.  Skipping open network $cSSID.
+									[ "$aap_findopen" = "0" ] && aaplog 5 scanman - Currently in WEP only mode.  Skipping open network $cSSID.
 								else
 									aaplog 5 scanman - Skipping \($cMODES\) protected network $cSSID.  
 									wlVarDie
