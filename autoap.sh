@@ -467,7 +467,7 @@ aap_joinpref ()
 ## to find a stable connection before courting a new AP.
 aap_checkjoin ()
 {
-		req_ssid=$1
+		req_ssid="$1"
 		cur_ssid=$(wl ssid|sed s/^.*:.\"//|sed s/\"$//)
 		wlip=$(nvram get wan_gateway)
 		if [ ! "$req_ssid" = "$cur_ssid" ] || [ "$wlip" = "0.0.0.0" ] ; then
@@ -491,9 +491,9 @@ aap_checkjoin ()
 				else
 					aaplog 3 checkjoin - Currently connected to ${cur_ssid}, attempting to join ${req_ssid}.
 					aaplog 7 checkjoin - Retrying join.
-					wl join $req_ssid > /dev/null 2>&1
+					wl join "$req_ssid" > /dev/null 2>&1
 					sleep 2
-					aap_checkjoin $req_ssid 1
+					aap_checkjoin "$req_ssid" 1
 				fi
 		else
 				aaplog 5 checkjoin - Successfully associated with $req_ssid.  Attempting to ping gateway.
