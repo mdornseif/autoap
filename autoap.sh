@@ -1,7 +1,7 @@
 #!/bin/sh
 #########################################################################################
 ##                                                                                     ##
-authstring="AutoAP, by JohnnyPrimus - lee@partners.biz - 2007-02-01 13:11 GMT"         ##
+authstring="AutoAP, by JohnnyPrimus - lee@partners.biz - 2007-02-01"                   ##
 ##  http://sourceforge.net/projects/autoap
 ##                                                                                     ##
 ##  autoap is a small addition for the already robust DD-WRT firmware that enables     ##
@@ -18,9 +18,9 @@ authstring="AutoAP, by JohnnyPrimus - lee@partners.biz - 2007-02-01 13:11 GMT"  
 # - the upcoming web interface (autoap.cgi and Wireless_AutoAP.asp)
 # - I have reverted the functions to a previous revision.  This rev 
 # - should be considered a stable branch of old code, as the functionality
-# - here has never been publically released.
+# - here has never been publicly released.
 # - The secondary motive is to fix the problems with WEP, curr_ssid, and
-# - joinpref that have become prevelant in the past few releases.
+# - joinpref that have become prevalent in the past few releases.
 # - The detailed changelog is too long to fully list here, a code diff is available
 # - via the SVN interface at sourceforge.
 #
