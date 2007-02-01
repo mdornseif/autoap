@@ -1,7 +1,7 @@
 #!/bin/sh
 #########################################################################################
 ##                                                                                     ##
-##  AutoAP, by JohnnyPrimus - lee@partners.biz - 01.29.2007                            ##
+authstring="AutoAP, by JohnnyPrimus - lee@partners.biz - 2007-02-01 13:11 GMT"         ##
 ##  http://sourceforge.net/projects/autoap
 ##                                                                                     ##
 ##  autoap is a small addition for the already robust DD-WRT firmware that enables     ##
@@ -32,6 +32,9 @@
 #
 #  2007-02-01
 # - use 'wl ssid' instead of 'wl assoc', works also when connected automatically
+# - put ssid in quotes, to handle spaces in SSIDs
+# - make date of the script appear on top of the log
+
 
 aaptmpdir="/tmp/autoap"
 aapwmpdir="/tmp/autoap/wep"
@@ -260,7 +263,7 @@ if [ "$aap_findwep" = "1" ]; then
 	fi
 fi
 
-aaplog 6 AutoAP by JohnnyPrimus started. lee@partners.biz
+aaplog 6 $authstring
 
 if [ "$wl_mode" = "1" ]; then
 	aaplog 3 FATAL - Router is in AP mode.  Exiting.
