@@ -49,6 +49,7 @@ authstring="AutoAP, by JohnnyPrimus - lee@partners.biz - 2007-01-29 13:11 GMT"  
 #
 #  2007-01-29
 # - some small tweaks for stability
+# - missing aap_ for dhcpw
 
 ME=`basename $0`
 RUNNING=`ps | grep $ME | wc -l`
@@ -274,7 +275,7 @@ aap_init_scan ()
 		aap_scanman
 	else
 		aaplog 5 init_scan - Scan failed.  Retrying initial scan.
-		sleep $dhcpw
+		sleep $aap_dhcpw
 	fi
 }
 
@@ -377,8 +378,8 @@ aap_joinpref ()
     fi
     aap_checkjoin "$tPref"
   done
-  aaplog 4 joinpref - End of available APs.  Sleeping $dhcpw
-  sleep $dhcpw
+  aaplog 4 joinpref - End of available APs.  Sleeping $aap_dhcpw
+  sleep $aap_dhcpw
 	rm -f $aaptmpdir/* 2>/dev/null
 	firstRun=1
 	current_ap=1

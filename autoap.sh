@@ -34,7 +34,7 @@ authstring="AutoAP, by JohnnyPrimus - lee@partners.biz - 2007-02-01 13:11 GMT"  
 # - use 'wl ssid' instead of 'wl assoc', works also when connected automatically
 # - put ssid in quotes, to handle spaces in SSIDs
 # - make date of the script appear on top of the log
-
+# - wait aap_dhcpw after dhcp renewal in aap_checkjoin()
 
 aaptmpdir="/tmp/autoap"
 aapwmpdir="/tmp/autoap/wep"
@@ -481,7 +481,7 @@ aap_checkjoin ()
 				elif [ "$wlip" = "0.0.0.0" ]; then
 					aaplog 3 checkjoin - $req_ssid has a WAN address of 0.0.0.0, last attempt at dhcp renewal.
 					killall -SIGUSR1 udhcpc > /dev/null 2>&1
-					sleep 7
+					sleep $aap_dhcpw
 					wlip=$(nvram get wan_gateway)
 					if [ "$wlip" = "0.0.0.0" ]; then
 						aaplog 4 checkjoin - $req_ssid invalid. Proceeding.
