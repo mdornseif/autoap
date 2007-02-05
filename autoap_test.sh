@@ -180,8 +180,8 @@ aaplog ()
 {
 	[ $# -gt 0 ] && p1="$1 " && shift;
 	ts=` /bin/date "+%Y-%m-%d %H:%M:%S "`
-	lcmd="${lc1}$p1${lc2}${ts}$* ";
-	[ "$aap_logger" = "html" ] && lcmd="${lc1}$p1${lc2}${ts}$* <br />";
+  lcmd="${lc1}$p1${lc2}${ts}\"$* \"";
+  [ "$aap_logger" = "html" ] && lcmd="${lc1}$p1${lc2}${ts}\"$* \"<br />";
 	runc=$($lcmd) 2>>$errredir
 }
 
