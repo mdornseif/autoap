@@ -1,7 +1,7 @@
 #!/bin/sh
 #########################################################################################
 ##                                                                                     ##
-authstring="AutoAP, by JohnnyPrimus - lee@partners.biz - 2007-02-06 12:37 GMT"         ##
+authstring="AutoAP, by JohnnyPrimus - lee@partners.biz - 2007-02-06 12:38 GMT"         ##
 ##                                                                                     ##
 ##  autoap is a small addition for the already robust DD-WRT firmware that enables     ##
 ##  users to migrate through/over many different wireless hotspots with low impact     ##
@@ -98,7 +98,7 @@ aap_logger="syslog"
 aap_wepkeys=""
 [ -n "$(nvram get autoap_wepkeys)" ] && aap_wepkeys="$(nvram get autoap_wepkeys)";
 if [ -n "$(nvram get autoap_wep1)" ]; then
- 	aap_wepkeys="${aap_wepkeys}$(nvram get autoap_wep1)";
+ 	aap_wepkeys="${aap_wepkeys} $(nvram get autoap_wep1)";
  	[ -n "$(nvram get autoap_wep2)" ] && aap_wepkeys="${aap_wepkeys} $(nvram get autoap_wep2)";
  	[ -n "$(nvram get autoap_wep3)" ] && aap_wepkeys="${aap_wepkeys} $(nvram get autoap_wep3)";
 fi
@@ -147,8 +147,8 @@ aap_scanfreq="60"
 
 if [ -n "$(nvram get autoap_mac1)" ]; then
  	aap_ignmacs="${aap_ignmacs} $(nvram get autoap_mac1)";
- 	[ "$(nvram get autoap_mac2)" ] && aap_ignmacs="${aap_ignmacs} $(nvram get autoap_mac2)"
- 	[ "$(nvram get autoap_mac3)" ] && aap_ignmacs="${aap_ignmacs} $(nvram get autoap_mac3)"
+ 	[ -n "$(nvram get autoap_mac2)" ] && aap_ignmacs="${aap_ignmacs} $(nvram get autoap_mac2)"
+ 	[ -n "$(nvram get autoap_mac3)" ] && aap_ignmacs="${aap_ignmacs} $(nvram get autoap_mac3)"
 fi
 
 
@@ -161,8 +161,8 @@ fi
 [ -n "$(nvram get autoap_ssidfilter)" ] && aap_ignssid="$(nvram get autoap_ssidfilter)";
  if [ -n "$(nvram get autoap_ssid1)" ]; then
  	aap_ignssid="${aap_ignssid} $(nvram get autoap_ssid1)";
- 	[ "$(nvram get autoap_ssid2)" ] && aap_ignssid="${aap_ignssid} $(nvram get autoap_ssid2)"
- 	[ "$(nvram get autoap_ssid3)" ] && aap_ignssid="${aap_ignssid} $(nvram get autoap_ssid3)"
+ 	[ -n "$(nvram get autoap_ssid2)" ] && aap_ignssid="${aap_ignssid} $(nvram get autoap_ssid2)"
+ 	[ -n "$(nvram get autoap_ssid3)" ] && aap_ignssid="${aap_ignssid} $(nvram get autoap_ssid3)"
 fi
 
 ############### SSID Prefer List ##########################################
@@ -174,10 +174,8 @@ fi
 ###########################################################################
 [ -n "$(nvram get autoap_prefssid)" ] && aap_prefssid="$(nvram get autoap_prefssid)";
 if [ -n "$(nvram get autoap_pref_1)" ]; then
- 	aap_prefssid="$(aap_prefssid) $(nvram get autoap_pref_1)"
- 	if [ "$(nvram get autoap_pref_2)" ]; then
- 	  aap_prefssid="$(aap_prefssid) $(nvram get autoap_pref_2)"
- 	fi
+ 	aap_prefssid="${aap_prefssid} $(nvram get autoap_pref_1)"
+ 	[ -n "$(nvram get autoap_pref_2)" ] && aap_prefssid="${aap_prefssid} $(nvram get autoap_pref_2)"
 fi
 
 ######  Maximum number of lines of the logfile. Default 1000
