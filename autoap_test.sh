@@ -1,7 +1,7 @@
 #!/bin/sh
 #########################################################################################
 ##                                                                                     ##
-authstring="AutoAP, by JohnnyPrimus - lee@partners.biz - 2007-01-29 13:11 GMT"         ##
+authstring="AutoAP, by JohnnyPrimus - lee@partners.biz - 2007-02-06 12:37 GMT"         ##
 ##                                                                                     ##
 ##  autoap is a small addition for the already robust DD-WRT firmware that enables     ##
 ##  users to migrate through/over many different wireless hotspots with low impact     ##
@@ -50,6 +50,11 @@ authstring="AutoAP, by JohnnyPrimus - lee@partners.biz - 2007-01-29 13:11 GMT"  
 #  2007-01-29
 # - some small tweaks for stability
 # - missing aap_ for dhcpw
+#
+# 2007-01-06
+# - merge webui changes without disturbing existing nvram variables
+# - fix looking for preferred SSIDs (nvram set autoap_prefssid="ssid1 ssid2 ...")
+#   this is restricted now to open ssids without spaces.
 
 ME=`basename $0`
 RUNNING=`ps | grep $ME | wc -l`
@@ -92,6 +97,11 @@ aap_logger="syslog"
 ##
 aap_wepkeys=""
 [ -n "$(nvram get autoap_wepkeys)" ] && aap_wepkeys="$(nvram get autoap_wepkeys)";
+if [ -n "$(nvram get autoap_wep1)" ]; then
+ 	aap_wepkeys="${aap_wepkeys}$(nvram get autoap_wep1)";
+ 	[ -n "$(nvram get autoap_wep2)" ] && aap_wepkeys="${aap_wepkeys} $(nvram get autoap_wep2)";
+ 	[ -n "$(nvram get autoap_wep3)" ] && aap_wepkeys="${aap_wepkeys} $(nvram get autoap_wep3)";
+fi
 
 ######  Max APs to track at once. Default 5
 ##  nvram set autoap_aplimit="5"
@@ -131,7 +141,16 @@ aap_scanfreq="60"
 ## nvram set autoap_macfilter="00:11:22:33:44:55 AA:BB:CC:DD:EE:FF etc" #
 ##   -see SSID ignore below.                                            #
 #########################################################################
+
+
 [ -n "$(nvram get autoap_macfilter)" ] && aap_ignmacs="$(nvram get autoap_macfilter)";
+
+if [ -n "$(nvram get autoap_mac1)" ]; then
+ 	aap_ignmacs="${aap_ignmacs} $(nvram get autoap_mac1)";
+ 	[ "$(nvram get autoap_mac2)" ] && aap_ignmacs="${aap_ignmacs} $(nvram get autoap_mac2)"
+ 	[ "$(nvram get autoap_mac3)" ] && aap_ignmacs="${aap_ignmacs} $(nvram get autoap_mac3)"
+fi
+
 
 ############### SSID Ignore List ##########################################
 ## Like the MAC filter, this is a space separated list stored in nvram,   # 
@@ -140,6 +159,26 @@ aap_scanfreq="60"
 ##                                                                        #
 ###########################################################################
 [ -n "$(nvram get autoap_ssidfilter)" ] && aap_ignssid="$(nvram get autoap_ssidfilter)";
+ if [ -n "$(nvram get autoap_ssid1)" ]; then
+ 	aap_ignssid="${aap_ignssid} $(nvram get autoap_ssid1)";
+ 	[ "$(nvram get autoap_ssid2)" ] && aap_ignssid="${aap_ignssid} $(nvram get autoap_ssid2)"
+ 	[ "$(nvram get autoap_ssid3)" ] && aap_ignssid="${aap_ignssid} $(nvram get autoap_ssid3)"
+fi
+
+############### SSID Prefer List ##########################################
+## Like the MAC filter, this is a space separated list stored in nvram,   # 
+## but with adverse effects. These are the preferred networks to connect  #
+## to.                                                                    #
+## nvram set autoap_prefssid="ssid1 ssid2 etc"                            # 
+##                                                                        #
+###########################################################################
+[ -n "$(nvram get autoap_prefssid)" ] && aap_prefssid="$(nvram get autoap_prefssid)";
+if [ -n "$(nvram get autoap_pref_1)" ]; then
+ 	aap_prefssid="$(aap_prefssid) $(nvram get autoap_pref_1)"
+ 	if [ "$(nvram get autoap_pref_2)" ]; then
+ 	  aap_prefssid="$(aap_prefssid) $(nvram get autoap_pref_2)"
+ 	fi
+fi
 
 ######  Maximum number of lines of the logfile. Default 1000
 ##  nvram set autoap_logsize="1000"
@@ -190,6 +229,7 @@ aap_logcurrsig ()
 	wl rssi $(wl bssid); wl noise &&  sleep 2;
 	cPRE=$(echo `wl rssi $(wl bssid);wl noise`)
 	cSIG=`echo $cPRE|awk {'print \$1-\$2'}`
+  aaplog 3 logsig - Current signal is ${cSIG}dB
 }
 
 wlReset ()
@@ -283,6 +323,11 @@ aap_init_scan ()
 ## logic, if the filter lists are configured. 
 aap_scanman ()
 {
+	if [ "$aap_prefssid" ]; then		
+ 		for n in $aap_prefssid; do
+ 				aaplog 4 ssid_filter - Joining $cSSID per used request.
+ 				checkjoin "$n"
+ 		done; fi
 	while read scanLine; do
 		lineID=$(expr substr "$scanLine" 1 4)
 		case "$lineID" in
@@ -349,6 +394,7 @@ aap_joinpref ()
       wepnet=0
     fi
     aaplog 4 joinpref - Moving to network $current_ap \($tPref\). 
+
     current_ap=$(($current_ap + 1))
     nvram set wl0_ssid=""
     nvram set wl_ssid=""
