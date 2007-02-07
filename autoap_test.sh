@@ -238,7 +238,7 @@ killall udhcpc > /dev/null 2>&1
 udhcpc  -i eth1 -p /tmp/var/run/udhcpc.pid -s /tmp/udhcpc > /dev/null 2>&1 &
 sleep $aap_dhcpw
 cur_ssid=$(wl ssid|sed s/^.*:.\"//|sed s/\"$//)
-  aaplog 3 aajoin - GW: $(ip route | awk '/default via/ {print $3}'), SSID: ${cur_ssid}
+  #aaplog 3 aajoin - GW: $(ip route | awk '/default via/ {print $3}'), SSID: ${cur_ssid}
 
 }
 
@@ -276,7 +276,6 @@ fi
 aap_init_scan ()
 {
   wl wsec 0 2>/dev/null
- 	wl scan -t passive > /dev/null 2>&1 && wl scanresults > /tmp/aap.result
  	wl scan -t passive > /dev/null 2>&1 && wl scanresults > /tmp/aap.result
 	if [ $(cat /tmp/aap.result | wc -l) -gt 2 ]; then
 		current_ap=1
