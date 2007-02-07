@@ -1,7 +1,7 @@
 #!/bin/sh
 #########################################################################################
 ##                                                                                     ##
-authstring="AutoAP, by JohnnyPrimus - lee@partners.biz - 2007-02-07 13:28 GMT"         ##
+authstring="AutoAP, by JohnnyPrimus - lee@partners.biz - 2007-02-07 17:18 GMT"         ##
 ##                                                                                     ##
 ##  autoap is a small addition for the already robust DD-WRT firmware that enables     ##
 ##  users to migrate through/over many different wireless hotspots with low impact     ##
@@ -63,6 +63,7 @@ authstring="AutoAP, by JohnnyPrimus - lee@partners.biz - 2007-02-07 13:28 GMT"  
 # - support spaces in SSIDs to be ignored (have to be replaced by '*')
 # - support spaces in preferred SSIDs  (have to be replaced by '*')
 # - scan more thoroughly for networks
+# - support wep-encrypted preferred networks
 
 
 ME=`basename $0`
@@ -276,7 +277,7 @@ else
   wl join "$1"
 fi
 sleep 2
-#kill -USR1 `cat /tmp/var/run/udhcpc.pid` > /dev/null 2>&1
+#kill -USR1 `cat /tmp/var/run/udhcpc.pid` > /dev/null 2>&1 # this is not strong enough for recent builds.
 kill -USR2 `cat /tmp/var/run/udhcpc.pid` > /dev/null 2>&1
 killall udhcpc > /dev/null 2>&1
 udhcpc  -i eth1 -p /tmp/var/run/udhcpc.pid -s /tmp/udhcpc > /dev/null 2>&1 &
@@ -338,21 +339,23 @@ aap_init_scan ()
 aap_scanman ()
 {
 	if [ "$aap_prefssid" ]; then		
+    wlkey=""
  		for n in $aap_prefssid; do
-        n="$(echo "$n" |sed 's/\([^*]*\)\*\(.*\)/\1 \2/')"
- 				aaplog 4 scanman - Joining $n per user request.
+        cSSID="$(echo "$n" | sed "s/\(.*\)\*key\*.*/\1/" | sed 's/*/ /g')"
+        wlkey="$(echo "$n" | grep \*key\* | sed "s/.*\*key\*\(.*\)/\1/")"
+ 				aaplog 4 scanman - Joining $cSSID per user request.
         nvram set wl0_ssid=""
-    nvram set wl_ssid="$n"
-    nvram set wan_ipaddr="0.0.0.0"
-    nvram set wan_netmask="0.0.0.0"
-    nvram set wan_gateway="0.0.0.0"
-    nvram set wan_get_dns=""
-    nvram set wan_lease="0"
-    rm /tmp/get_lease_time
-    rm /tmp/lease_time
+        nvram set wl_ssid="$cSSID"
+        nvram set wan_ipaddr="0.0.0.0"
+        nvram set wan_netmask="0.0.0.0"
+        nvram set wan_gateway="0.0.0.0"
+        nvram set wan_get_dns=""
+        nvram set wan_lease="0"
+        rm /tmp/get_lease_time
+        rm /tmp/lease_time
         wl wsec 0 2>/dev/null
-			  aajoin "$n"
- 				aap_checkjoin "$n"
+			  aajoin "$cSSID" $wlkey
+ 				aap_checkjoin "$cSSID" $wlkey
  		done; fi
 if [ "$aap_prefonly" = "0" ]; then
 	while read scanLine; do
