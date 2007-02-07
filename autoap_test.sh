@@ -1,7 +1,7 @@
 #!/bin/sh
 #########################################################################################
 ##                                                                                     ##
-authstring="AutoAP, by JohnnyPrimus - lee@partners.biz - 2007-02-06 23:58 GMT"         ##
+authstring="AutoAP, by JohnnyPrimus - lee@partners.biz - 2007-02-07 10:28 GMT"         ##
 ##                                                                                     ##
 ##  autoap is a small addition for the already robust DD-WRT firmware that enables     ##
 ##  users to migrate through/over many different wireless hotspots with low impact     ##
@@ -57,6 +57,9 @@ authstring="AutoAP, by JohnnyPrimus - lee@partners.biz - 2007-02-06 23:58 GMT"  
 #   this is restricted now to open ssids without spaces.
 # - fix problem with newest builds
 # - new nvram variable autoap_prefonly, true if only interested in preferred networks.
+#
+# 2007-02-07
+# - some preferred ssid fixes, but not entirely there yet
 
 ME=`basename $0`
 RUNNING=`ps | grep $ME | wc -l`
@@ -330,11 +333,13 @@ aap_init_scan ()
 aap_scanman ()
 {
 	if [ "$aap_prefssid" ]; then		
- 		for n in "$aap_prefssid"; do
- 				aaplog 4 ssid_filter - Joining $n per used request.
+ 		for n in $aap_prefssid; do
+ 				aaplog 4 ssid_filter - Joining $n per user request.
+			  aajoin "$n"
  				aap_checkjoin "$n"
  		done; fi
-	while [ read scanLine ] && [ $aap_prefonly != "1" ] ; do
+if [ "$aap_prefonly" = "0" ]; then
+	while read scanLine; do
 		lineID=$(expr substr "$scanLine" 1 4)
 		case "$lineID" in
 				'SSID')
@@ -381,6 +386,7 @@ aap_scanman ()
 				;;
 		esac
 	done < /tmp/aap.result
+  fi
 	ap_dir_limit="$(ls -1 $aaptmpdir | wc -l)"
 	aap_joinpref
 }
