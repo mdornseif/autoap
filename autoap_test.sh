@@ -330,9 +330,9 @@ aap_init_scan ()
 aap_scanman ()
 {
 	if [ "$aap_prefssid" ]; then		
- 		for n in $aap_prefssid; do
- 				aaplog 4 ssid_filter - Joining $cSSID per used request.
- 				checkjoin "$n"
+ 		for n in "$aap_prefssid"; do
+ 				aaplog 4 ssid_filter - Joining $n per used request.
+ 				aap_checkjoin "$n"
  		done; fi
 	while [ read scanLine ] && [ $aap_prefonly != "1" ] ; do
 		lineID=$(expr substr "$scanLine" 1 4)
