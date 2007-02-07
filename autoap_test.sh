@@ -1,7 +1,7 @@
 #!/bin/sh
 #########################################################################################
 ##                                                                                     ##
-authstring="AutoAP, by JohnnyPrimus - lee@partners.biz - 2007-02-07 10:28 GMT"         ##
+authstring="AutoAP, by JohnnyPrimus - lee@partners.biz - 2007-02-07 13:28 GMT"         ##
 ##                                                                                     ##
 ##  autoap is a small addition for the already robust DD-WRT firmware that enables     ##
 ##  users to migrate through/over many different wireless hotspots with low impact     ##
@@ -60,6 +60,10 @@ authstring="AutoAP, by JohnnyPrimus - lee@partners.biz - 2007-02-07 10:28 GMT"  
 #
 # 2007-02-07
 # - some preferred ssid fixes, but not entirely there yet
+# - support spaces in SSIDs to be ignored (have to be replaced by '*')
+# - support spaces in preferred SSIDs  (have to be replaced by '*')
+# - scan more thoroughly for networks
+
 
 ME=`basename $0`
 RUNNING=`ps | grep $ME | wc -l`
@@ -278,7 +282,7 @@ killall udhcpc > /dev/null 2>&1
 udhcpc  -i eth1 -p /tmp/var/run/udhcpc.pid -s /tmp/udhcpc > /dev/null 2>&1 &
 sleep $aap_dhcpw
 cur_ssid=$(wl ssid|sed s/^.*:.\"//|sed s/\"$//)
-#  aaplog 3 aajoin - GW: $(ip route | awk '/default via/ {print $3}'), SSID: ${cur_ssid}
+  aaplog 3 aajoin - GW: $(ip route | awk '/default via/ {print $3}'), SSID: ${cur_ssid}
 
 }
 
@@ -316,7 +320,8 @@ fi
 aap_init_scan ()
 {
   wl wsec 0 2>/dev/null
- 	wl scan > /dev/null 2>&1 && wl scanresults > /tmp/aap.result
+ 	wl scan -t passive > /dev/null 2>&1 && wl scanresults > /tmp/aap.result
+ 	wl scan -t passive > /dev/null 2>&1 && wl scanresults > /tmp/aap.result
 	if [ $(cat /tmp/aap.result | wc -l) -gt 2 ]; then
 		current_ap=1
 		aaplog 5 init_scan - Retrieved new scan data.
@@ -334,7 +339,18 @@ aap_scanman ()
 {
 	if [ "$aap_prefssid" ]; then		
  		for n in $aap_prefssid; do
- 				aaplog 4 ssid_filter - Joining $n per user request.
+        n="$(echo "$n" |sed 's/\([^*]*\)\*\(.*\)/\1 \2/')"
+ 				aaplog 4 scanman - Joining $n per user request.
+        nvram set wl0_ssid=""
+    nvram set wl_ssid="$n"
+    nvram set wan_ipaddr="0.0.0.0"
+    nvram set wan_netmask="0.0.0.0"
+    nvram set wan_gateway="0.0.0.0"
+    nvram set wan_get_dns=""
+    nvram set wan_lease="0"
+    rm /tmp/get_lease_time
+    rm /tmp/lease_time
+        wl wsec 0 2>/dev/null
 			  aajoin "$n"
  				aap_checkjoin "$n"
  		done; fi
@@ -345,6 +361,7 @@ if [ "$aap_prefonly" = "0" ]; then
 				'SSID')
 						cSSID=$(echo "$scanLine" | tr -d '"' | sed s!SSID:.!!)
 						for i in $aap_ignssid; do
+              i="$(echo "$i" |sed 's/\([^*]*\)\*\(.*\)/\1 \2/')"
 							[ "$cSSID" = "$i" ] && net_type="ignore"
 						done 
 				;;
@@ -386,9 +403,12 @@ if [ "$aap_prefonly" = "0" ]; then
 				;;
 		esac
 	done < /tmp/aap.result
-  fi
 	ap_dir_limit="$(ls -1 $aaptmpdir | wc -l)"
 	aap_joinpref
+  else
+		aaplog 2 scanman - End of preferred networks. Sleeping $aap_scanfreq
+    sleep $aap_scanfreq
+  fi
 }
 
 ## joinpref handles associating with an AP, 
@@ -448,14 +468,14 @@ aap_joinpref ()
 aap_checkjoin ()
 {
     req_ssid="$1"
-		wlip=`ip route | awk '/default via/ {print $3}'`
+		wlip=$(nvram get wan_gateway)
 		if [ ! "$req_ssid" = "$cur_ssid" ] || [ $wlip = "0.0.0.0" ] ; then # see if join worked otherwise retry twice
 	    aaplog 3 checkjoin - Currently connected to "$cur_ssid", attempting to join "$req_ssid".
-			aajoin "$req_ssid"
-		  wlip=`ip route | awk '/default via/ {print $3}'`
+			aajoin "$req_ssid" $2
+		  wlip=$(nvram get wan_gateway)
 		  if [ ! "$req_ssid" = "$cur_ssid" ] || [ $wlip = "0.0.0.0" ] ; then
 	      aaplog 3 checkjoin - Attempting again to join ${req_ssid}.
-			  aajoin "$req_ssid"
+			  aajoin "$req_ssid" $2
       fi
     fi
 		if [ "$req_ssid" = "$cur_ssid" ] ; then 
