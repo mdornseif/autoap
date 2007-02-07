@@ -10,6 +10,7 @@
 - support spaces in preferred SSIDs  (have to be replaced by '*')
 - scan more thoroughly for networks
 - support wep-encrypted preferred networks
+- move changelog into separate file (to avoid bloat)
 
 2007-02-06 (mathilda,JP)
 - merge webui changes without disturbing existing nvram variables
@@ -22,7 +23,7 @@
 - some small tweaks for stability
 - missing aap_ for dhcpw
   
- 2007-01-28 (jhonnyprimus)
+ 2007-01-28 (johnnyprimus)
 - add aap_logcurrsig.  invoking this function
   with no arugments will log the current signal
   strength of the active AP.

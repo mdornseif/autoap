@@ -10,53 +10,7 @@ authstring="AutoAP, by JohnnyPrimus - lee@partners.biz - 2007-02-07 17:18 GMT"  
 ##                                                                                     ##
 #########################################################################################
 
-#History:
-#
-#   2007-01-09
-# - removed variable inet_two (was unused)
-# - update cur_wip in aap_init_scan()
-# - put ssid to join in quotes, to handle spaces in SSIDs
-# - wait aap_dhcpw after dhcp renewal in aap_checkjoin()
-# - reorganized aap_checkjoin() and aap_inet_chk. Should be cleaner and more reliable.
-#
-#   2007-01-10
-# - make it insist more on ping to avoid changing connection for no reason
-# - for some reason DD-WRT is not reliably assigning a GW address 
-#   (nvram get wan_gateway). Making it tolerant for this behavior.
-# - cleanup aap_inet_chk more. 24 lines down from 39
-#
-#   2007-01-11
-# - getting rid of $logparse 
-# - restructure aap_init_scan() some (no recursive calls, leave the checking to
-#   aap_checkjoin() )
-#
-#   2007-01-12
-# - truncate logfile works now.
-# - preserve HTML header when truncating logfile
-# - new nvram variable autoap_logsize (default 1000 lines)
-#
-#  2007-01-16
-# - major overhaul aap_scanman and aap_joinpref
-# - connection to wep-networks working now
-# - you can have both wep and open search enabled separately or together
-# - no need for the subdir autoap/wep anymore
-# - dhcp is safer now
-#
-#  2007-01-28
-# - add aap_logcurrsig.  invoking this function
-#   with no arugments will log the current signal
-#   strength of the active AP.
-#
-#  2007-01-29
-# - some small tweaks for stability
-# - missing aap_ for dhcpw
-#
-# 2007-02-06
-# - merge webui changes without disturbing existing nvram variables
-# - fix looking for preferred SSIDs (nvram set autoap_prefssid="ssid1 ssid2 ...")
-#   this is restricted now to open ssids without spaces.
-# - fix problem with newest builds
-# - new nvram variable autoap_prefonly, true if only interested in preferred networks.
+# Latest changes:
 #
 # 2007-02-07
 # - some preferred ssid fixes, but not entirely there yet
@@ -64,6 +18,7 @@ authstring="AutoAP, by JohnnyPrimus - lee@partners.biz - 2007-02-07 17:18 GMT"  
 # - support spaces in preferred SSIDs  (have to be replaced by '*')
 # - scan more thoroughly for networks
 # - support wep-encrypted preferred networks
+# - move history into separate changelog file
 
 
 ME=`basename $0`
