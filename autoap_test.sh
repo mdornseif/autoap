@@ -1,7 +1,7 @@
 #!/bin/sh
 #########################################################################################
 ##                                                                                     ##
-authstring="AutoAP, by JohnnyPrimus - lee@partners.biz - 2007-02-06 14:41 GMT"         ##
+authstring="AutoAP, by JohnnyPrimus - lee@partners.biz - 2007-02-06 23:58 GMT"         ##
 ##                                                                                     ##
 ##  autoap is a small addition for the already robust DD-WRT firmware that enables     ##
 ##  users to migrate through/over many different wireless hotspots with low impact     ##
@@ -51,11 +51,12 @@ authstring="AutoAP, by JohnnyPrimus - lee@partners.biz - 2007-02-06 14:41 GMT"  
 # - some small tweaks for stability
 # - missing aap_ for dhcpw
 #
-# 2007-01-06
+# 2007-02-06
 # - merge webui changes without disturbing existing nvram variables
 # - fix looking for preferred SSIDs (nvram set autoap_prefssid="ssid1 ssid2 ...")
 #   this is restricted now to open ssids without spaces.
 # - fix problem with newest builds
+# - new nvram variable autoap_prefonly, true if only interested in preferred networks.
 
 ME=`basename $0`
 RUNNING=`ps | grep $ME | wc -l`
@@ -185,6 +186,10 @@ fi
 aap_logsize="1000"
 [ -n "$(nvram get autoap_logsize)" ] && aap_logsize="$(nvram get autoap_logsize)";
 
+###### True if only interested in preferred networks. Default false.
+aap_prefonly="0"
+[ -n "$(nvram get autoap_prefonly)" ] && aap_prefonly="$(nvram get autoap_prefonly)";
+
 ########## Misc. Utilities #############
 ## A number of utility functions needed
 ## by scanman, amongst others.
@@ -244,7 +249,7 @@ aaping ()
 {
 	pcmd=`ping -c 5 $1 | grep from | wc -l | awk '{ print \$1 }'`
 	if [ ! $pcmd -gt 1 ]; then
-		aaplog 3 "aaping - Failed to ping $1."
+		aaplog 3 aaping - Failed to ping $1.
 	  echo "0"
 	else
 		aaplog 3 aaping - Recieved ping reply from $1.
@@ -264,10 +269,10 @@ else
   wl join "$1"
 fi
 sleep 2
-kill -USR1 `cat /tmp/var/run/udhcpc.pid` > /dev/null 2>&1
-#kill -USR2 `cat /tmp/var/run/udhcpc.pid` > /dev/null 2>&1
-#killall udhcpc > /dev/null 2>&1
-#udhcpc  -i eth1 -p /tmp/var/run/udhcpc.pid -s /tmp/udhcpc > /dev/null 2>&1 &
+#kill -USR1 `cat /tmp/var/run/udhcpc.pid` > /dev/null 2>&1
+kill -USR2 `cat /tmp/var/run/udhcpc.pid` > /dev/null 2>&1
+killall udhcpc > /dev/null 2>&1
+udhcpc  -i eth1 -p /tmp/var/run/udhcpc.pid -s /tmp/udhcpc > /dev/null 2>&1 &
 sleep $aap_dhcpw
 cur_ssid=$(wl ssid|sed s/^.*:.\"//|sed s/\"$//)
 #  aaplog 3 aajoin - GW: $(ip route | awk '/default via/ {print $3}'), SSID: ${cur_ssid}
@@ -329,7 +334,7 @@ aap_scanman ()
  				aaplog 4 ssid_filter - Joining $cSSID per used request.
  				checkjoin "$n"
  		done; fi
-	while read scanLine; do
+	while [ read scanLine ] && [ $aap_prefonly != "1" ] ; do
 		lineID=$(expr substr "$scanLine" 1 4)
 		case "$lineID" in
 				'SSID')
@@ -419,6 +424,7 @@ aap_joinpref ()
       fi
 		fi
 		if [ "$wepnet" = "0" ]; then
+      wl wsec 0 2>/dev/null
 			aajoin "$tPref"
     fi
     aap_checkjoin "$tPref"
