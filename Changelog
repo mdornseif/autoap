@@ -4,6 +4,12 @@
  to the users internet connectivity.  This is especially useful in broad, city      
  scale areas with dense AP population.                                              
 
+2007-02-08 (mathilda)
+- wlReset function removed because obsolete
+- default logging is html
+- moved preferred network handling up, before scan
+- make connections more reliable with recent builds
+
 2007-02-07 (mathilda)
 - some preferred ssid fixes, but not entirely there yet
 - support spaces in SSIDs to be ignored (have to be replaced by '*')
