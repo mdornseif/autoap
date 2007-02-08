@@ -1,7 +1,7 @@
 #!/bin/sh
 #########################################################################################
 ##                                                                                     ##
-authstring="AutoAP, by JohnnyPrimus - lee@partners.biz - 2007-02-07 17:18 GMT"         ##
+authstring="AutoAP, by JohnnyPrimus - lee@partners.biz - 2007-02-08 13:39 GMT"         ##
 ##                                                                                     ##
 ##  autoap is a small addition for the already robust DD-WRT firmware that enables     ##
 ##  users to migrate through/over many different wireless hotspots with low impact     ##
@@ -12,14 +12,11 @@ authstring="AutoAP, by JohnnyPrimus - lee@partners.biz - 2007-02-07 17:18 GMT"  
 
 # Latest changes:
 #
-# 2007-02-07
-# - some preferred ssid fixes, but not entirely there yet
-# - support spaces in SSIDs to be ignored (have to be replaced by '*')
-# - support spaces in preferred SSIDs  (have to be replaced by '*')
-# - scan more thoroughly for networks
-# - support wep-encrypted preferred networks
-# - move history into separate changelog file
-
+# 2007-02-08
+# - wlReset function removed because obsolete
+# - default logging is html
+# - moved preferred network handling up, before scan
+# - make connections more reliable with recent builds
 
 ME=`basename $0`
 RUNNING=`ps | grep $ME | wc -l`
@@ -52,7 +49,7 @@ aap_findwep="0"
 ##  syslog, filename and html.  If html is selected, the log is
 ##  available via web browser at http://routerip/autoap/log.html
 ##
-aap_logger="syslog"
+aap_logger="html"
 [ -n "$(nvram get autoap_logger)" ] && aap_logger="$(nvram get autoap_logger)";
 
 ######  WEP Keys
@@ -109,7 +106,6 @@ aap_scanfreq="60"
 
 
 [ -n "$(nvram get autoap_macfilter)" ] && aap_ignmacs="$(nvram get autoap_macfilter)";
-
 if [ -n "$(nvram get autoap_mac1)" ]; then
  	aap_ignmacs="${aap_ignmacs} $(nvram get autoap_mac1)";
  	[ -n "$(nvram get autoap_mac2)" ] && aap_ignmacs="${aap_ignmacs} $(nvram get autoap_mac2)"
@@ -120,7 +116,8 @@ fi
 ############### SSID Ignore List ##########################################
 ## Like the MAC filter, this is a space separated list stored in nvram,   # 
 ## and will prevent autoap from connecting to any SSID you designate.     #
-## nvram set autoap_ssidfilter="ssid1 ssid2 etc"                          # 
+## spaces in the SSIDs have to be replaced by *s                          #
+## nvram set autoap_ssidfilter="ssid1 ssid*with*spaces2 etc"              # 
 ##                                                                        #
 ###########################################################################
 [ -n "$(nvram get autoap_ssidfilter)" ] && aap_ignssid="$(nvram get autoap_ssidfilter)";
@@ -133,8 +130,9 @@ fi
 ############### SSID Prefer List ##########################################
 ## Like the MAC filter, this is a space separated list stored in nvram,   # 
 ## but with adverse effects. These are the preferred networks to connect  #
-## to.                                                                    #
-## nvram set autoap_prefssid="ssid1 ssid2 etc"                            # 
+## to. An eventual wep-key is attached with a separating "*key*"          #
+## spaces in the SSIDs have to be replaced by *s                          #
+## nvram set autoap_prefssid="ssid1*with*spaces ssid2_is_wep*key*12345ab" # 
 ##                                                                        #
 ###########################################################################
 [ -n "$(nvram get autoap_prefssid)" ] && aap_prefssid="$(nvram get autoap_prefssid)";
@@ -156,8 +154,6 @@ aap_prefonly="0"
 ########## Misc. Utilities #############
 ## A number of utility functions needed
 ## by scanman, amongst others.
-
-## Clear all query and scanner vars simultaneously and reset scan status.
 
 case "$aap_logger" in
 		'syslog')
@@ -184,10 +180,10 @@ aaplog ()
 {
 	[ $# -gt 0 ] && p1="$1 " && shift;
 	ts=` /bin/date "+%Y-%m-%d %H:%M:%S "`
-  lcmd="${lc1}$p1${lc2}${ts}\"$* \"";
   if [ "$aap_logger" = "html" ]; then
     echo "${ts}$* <br>" >> $errredir;
   else
+    lcmd="${lc1}$p1${lc2}${ts}\"$* \"";
 	  $($lcmd) 2>>$errredir
   fi
 }
@@ -198,14 +194,6 @@ aap_logcurrsig ()
 	cPRE=$(echo `wl rssi $(wl bssid);wl noise`)
 	cSIG=`echo $cPRE|awk {'print \$1-\$2'}`
   aaplog 3 logsig - Current signal is ${cSIG}dB
-}
-
-wlReset ()
-{
-	aaplog 7 wlReset - Completely resetting scanner. 
-	firstRun=1
-	rm -f /tmp/aap.result 2>/dev/null
-	rm -f $aaptmpdir/* 2>/dev/null
 }
 
 aaping ()
@@ -220,8 +208,7 @@ aaping ()
 	fi
 }
 
-# try to join a network. 
-# aajoin <network> [wepkey]
+# try to join a network: aajoin <network> [wepkey]
 aajoin ()
 {
 if [ -n "$2" ]; then 
@@ -269,56 +256,60 @@ fi
 if [ "$(nvram get wan_proto)" = "static" ]; then
 	aaplog 4 init_scan - Router is not in DHCP mode.  Setting DHCP mode.
 	nvram set wan_proto="dhcp"
-	nvram commit
 fi
 
 ## Initialize scans
 aap_init_scan ()
 {
-  wl wsec 0 2>/dev/null
- 	wl scan -t passive > /dev/null 2>&1 && wl scanresults > /tmp/aap.result
-	if [ $(cat /tmp/aap.result | wc -l) -gt 2 ]; then
-		current_ap=1
-		aaplog 5 init_scan - Retrieved new scan data.
-		firstRun=0
-		aap_scanman
-	else
-		aaplog 5 init_scan - Scan failed.  Retrying initial scan.
-		sleep $aap_dhcpw
-	fi
+  if [ -n "$aap_prefssid" ]; then	# check for preferred networks	
+    wlkey=""
+ 		for n in $aap_prefssid; do
+      cSSID="$(echo "$n" | sed "s/\(.*\)\*key\*.*/\1/" | sed 's/*/ /g')"
+      wlkey="$(echo "$n" | grep \*key\* | sed "s/.*\*key\*\(.*\)/\1/")"
+ 			aaplog 4 scanman - Joining $cSSID per user request.
+      nvram set wl0_ssid="$cSSID"
+      nvram set wl_ssid="$cSSID"
+      nvram set wan_ipaddr="0.0.0.0"
+      nvram set wan_netmask="0.0.0.0"
+      nvram set wan_gateway="0.0.0.0"
+      nvram set wan_get_dns=""
+      nvram set wan_lease="0"
+      rm /tmp/get_lease_time
+      rm /tmp/lease_time
+      wl wsec 0 2>/dev/null
+		  aajoin "$cSSID" $wlkey
+ 			aap_checkjoin "$cSSID" $wlkey
+ 		done
+  fi
+  if [ "$aap_prefonly" = "0" ]; then # do not scan if only looking for preferred networks
+    wl wsec 0 2>/dev/null
+ 	  wl scan -t passive > /dev/null 2>&1 && wl scanresults > /tmp/aap.result
+	  if [ $(cat /tmp/aap.result | wc -l) -gt 2 ]; then
+		  current_ap=1
+		  aaplog 5 init_scan - Retrieved new scan data.
+		  firstRun=0
+		  aap_scanman
+	  else
+		  aaplog 5 init_scan - Scan failed.  Retrying initial scan.
+		  sleep $aap_dhcpw
+	  fi
+  else
+		aaplog 2 scanman - End of preferred networks. Sleeping $aap_scanfreq
+    sleep $aap_scanfreq
+  fi
 }
 
 ## Scanman performs all of the parsing and filter
 ## logic, if the filter lists are configured. 
 aap_scanman ()
 {
-	if [ "$aap_prefssid" ]; then		
-    wlkey=""
- 		for n in $aap_prefssid; do
-        cSSID="$(echo "$n" | sed "s/\(.*\)\*key\*.*/\1/" | sed 's/*/ /g')"
-        wlkey="$(echo "$n" | grep \*key\* | sed "s/.*\*key\*\(.*\)/\1/")"
- 				aaplog 4 scanman - Joining $cSSID per user request.
-        nvram set wl0_ssid=""
-        nvram set wl_ssid="$cSSID"
-        nvram set wan_ipaddr="0.0.0.0"
-        nvram set wan_netmask="0.0.0.0"
-        nvram set wan_gateway="0.0.0.0"
-        nvram set wan_get_dns=""
-        nvram set wan_lease="0"
-        rm /tmp/get_lease_time
-        rm /tmp/lease_time
-        wl wsec 0 2>/dev/null
-			  aajoin "$cSSID" $wlkey
- 				aap_checkjoin "$cSSID" $wlkey
- 		done; fi
-if [ "$aap_prefonly" = "0" ]; then
 	while read scanLine; do
 		lineID=$(expr substr "$scanLine" 1 4)
 		case "$lineID" in
 				'SSID')
 						cSSID=$(echo "$scanLine" | tr -d '"' | sed s!SSID:.!!)
 						for i in $aap_ignssid; do
-              i="$(echo "$i" |sed 's/\([^*]*\)\*\(.*\)/\1 \2/')"
+              i="$(echo "$i" | sed 's/*/ /g')"
 							[ "$cSSID" = "$i" ] && net_type="ignore"
 						done 
 				;;
@@ -362,10 +353,13 @@ if [ "$aap_prefonly" = "0" ]; then
 	done < /tmp/aap.result
 	ap_dir_limit="$(ls -1 $aaptmpdir | wc -l)"
 	aap_joinpref
-  else
-		aaplog 2 scanman - End of preferred networks. Sleeping $aap_scanfreq
-    sleep $aap_scanfreq
-  fi
+  aaplog 4 joinpref - End of available APs.  Sleeping $aap_dhcpw
+  nvram set wl0_ssid=""
+  nvram set wl_ssid=""
+  sleep $aap_dhcpw
+	rm -f $aaptmpdir/* 2>/dev/null
+	firstRun=1
+	current_ap=1
 }
 
 ## joinpref handles associating with an AP, 
@@ -383,10 +377,9 @@ aap_joinpref ()
       wepnet=0
     fi
     aaplog 4 joinpref - Moving to network $current_ap \($tPref\). 
-
     current_ap=$(($current_ap + 1))
-    nvram set wl0_ssid=""
-    nvram set wl_ssid=""
+    nvram set wl0_ssid="$tPref"
+    nvram set wl_ssid="$tPref"
     nvram set wan_ipaddr="0.0.0.0"
     nvram set wan_netmask="0.0.0.0"
     nvram set wan_gateway="0.0.0.0"
@@ -412,11 +405,6 @@ aap_joinpref ()
     fi
     aap_checkjoin "$tPref"
   done
-  aaplog 4 joinpref - End of available APs.  Sleeping $aap_dhcpw
-  sleep $aap_dhcpw
-	rm -f $aaptmpdir/* 2>/dev/null
-	firstRun=1
-	current_ap=1
 }
 
 ## checkjoin contains logic to verify the connection to the correct AP
