@@ -1,14 +1,23 @@
 #!/bin/sh
 #########################################################################################
 ##                                                                                     ##
-authstring="AutoAP, by JohnnyPrimus - lee@partners.biz - 2007-02-08 13:39 GMT"         ##
+##  AutoAP, by JohnnyPrimus, additional development by Mathilda and MarcJohnson        ##
+##  http://sourceforge.net/projects/autoap                                             ##
 ##                                                                                     ##
 ##  autoap is a small addition for the already robust DD-WRT firmware that enables     ##
 ##  users to migrate through/over many different wireless hotspots with low impact     ##
 ##  to the users internet connectivity.  This is especially useful in broad, city      ##
 ##  scale areas with dense AP population.                                              ##
 ##                                                                                     ##
+##  Terms and Conditions:                                                              ##
+##                                                                                     ##
+##  AutoAP is released under the GNU Public License, and is subject to all conditions  ##
+##  of the latest version.  The full version of the license can be viewed within the   ##
+##  filed named LICENSE, or by visiting http://www.gnu.org/licenses/gpl.txt            ##
+##                                                                                     ##
 #########################################################################################
+authstring="AutoAP, by JohnnyPrimus - lee@partners.biz - 2007-02-01"                   ##
+authstring2="Additional development by Mathilda and MarcJohnson"                       ##
 
 # Latest changes:
 #
@@ -241,6 +250,7 @@ tPref=""
 wl wsec 0 2>/dev/null
 
 aaplog 6 $authstring
+aaplog 6 $authstring2
 if [ "$aap_findwep" = "1" ]; then
 	if [ "$aap_wepkeys" = "" ]; then
 		aaplog 4 WEP keys not provided.  Switching to open only mode.
