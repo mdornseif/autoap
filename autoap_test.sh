@@ -16,16 +16,13 @@
 ##  filed named LICENSE, or by visiting http://www.gnu.org/licenses/gpl.txt            ##
 ##                                                                                     ##
 #########################################################################################
-authstring="AutoAP, by JohnnyPrimus - lee@partners.biz - 2007-02-01"                   ##
-authstring2="Additional development by Mathilda and MarcJohnson"                       ##
+authstring="AutoAP, by JohnnyPrimus - lee@partners.biz - 2007-02-12 22:23 GMT"
+authstring2="Additional development by Mathilda and MarcJohnson"
 
 # Latest changes:
 #
-# 2007-02-08
-# - wlReset function removed because obsolete
-# - default logging is html
-# - moved preferred network handling up, before scan
-# - make connections more reliable with recent builds
+# 2007-02-12
+# - only try to connect to preferred net if it got detected in scan
 
 ME=`basename $0`
 RUNNING=`ps | grep $ME | wc -l`
@@ -114,13 +111,16 @@ aap_scanfreq="60"
 #########################################################################
 
 
-[ -n "$(nvram get autoap_macfilter)" ] && aap_ignmacs="$(nvram get autoap_macfilter)";
-if [ -n "$(nvram get autoap_mac1)" ]; then
- 	aap_ignmacs="${aap_ignmacs} $(nvram get autoap_mac1)";
+if [ -n "$(nvram get autoap_macfilter)" ]; then
+   aap_ignmacs="$(nvram get autoap_macfilter)";
+ 	[ -n "$(nvram get autoap_mac1)" ] && aap_ignmacs="${aap_ignmacs} $(nvram get autoap_mac1)"
  	[ -n "$(nvram get autoap_mac2)" ] && aap_ignmacs="${aap_ignmacs} $(nvram get autoap_mac2)"
  	[ -n "$(nvram get autoap_mac3)" ] && aap_ignmacs="${aap_ignmacs} $(nvram get autoap_mac3)"
+ # for n in $aap_ignmacs; do
+ #   wl mac "$n"
+ # done
+ # wl macmode 1
 fi
-
 
 ############### SSID Ignore List ##########################################
 ## Like the MAC filter, this is a space separated list stored in nvram,   # 
@@ -271,27 +271,6 @@ fi
 ## Initialize scans
 aap_init_scan ()
 {
-  if [ -n "$aap_prefssid" ]; then	# check for preferred networks	
-    wlkey=""
- 		for n in $aap_prefssid; do
-      cSSID="$(echo "$n" | sed "s/\(.*\)\*key\*.*/\1/" | sed 's/*/ /g')"
-      wlkey="$(echo "$n" | grep \*key\* | sed "s/.*\*key\*\(.*\)/\1/")"
- 			aaplog 4 scanman - Joining $cSSID per user request.
-      nvram set wl0_ssid="$cSSID"
-      nvram set wl_ssid="$cSSID"
-      nvram set wan_ipaddr="0.0.0.0"
-      nvram set wan_netmask="0.0.0.0"
-      nvram set wan_gateway="0.0.0.0"
-      nvram set wan_get_dns=""
-      nvram set wan_lease="0"
-      rm /tmp/get_lease_time
-      rm /tmp/lease_time
-      wl wsec 0 2>/dev/null
-		  aajoin "$cSSID" $wlkey
- 			aap_checkjoin "$cSSID" $wlkey
- 		done
-  fi
-  if [ "$aap_prefonly" = "0" ]; then # do not scan if only looking for preferred networks
     wl wsec 0 2>/dev/null
  	  wl scan -t passive > /dev/null 2>&1 && wl scanresults > /tmp/aap.result
 	  if [ $(cat /tmp/aap.result | wc -l) -gt 2 ]; then
@@ -303,17 +282,34 @@ aap_init_scan ()
 		  aaplog 5 init_scan - Scan failed.  Retrying initial scan.
 		  sleep $aap_dhcpw
 	  fi
-  else
-		aaplog 2 scanman - End of preferred networks. Sleeping $aap_scanfreq
-    sleep $aap_scanfreq
-  fi
 }
 
 ## Scanman performs all of the parsing and filter
 ## logic, if the filter lists are configured. 
 aap_scanman ()
 {
-	while read scanLine; do
+  if [ -n "$aap_prefssid" ]; then	# check for preferred networks	
+    wlkey=""
+ 		for n in $aap_prefssid; do
+      cSSID="$(echo "$n" | sed "s/\(.*\)\*key\*.*/\1/" | sed 's/*/ /g')"
+      wlkey="$(echo "$n" | grep \*key\* | sed "s/.*\*key\*\(.*\)/\1/")"
+      is_there="$(cat /tmp/aap.result | grep "$cSSID" )"
+ 			  aaplog 4 scanman - is_there: $is_there is online.
+      if [ -n "$is_there" ]; then # got the network detected at all?
+   			aaplog 4 scanman - Trying to join preferred network $cSSID.
+        nvram set wl0_ssid="$cSSID"
+        nvram set wl_ssid="$cSSID"
+        nvram set wan_gateway="0.0.0.0"
+        wl wsec 0 2>/dev/null
+		    aajoin "$cSSID" $wlkey
+ 			  aap_checkjoin "$cSSID" $wlkey
+      else
+ 			  aaplog 4 scanman - Preferred network $cSSID is not online.
+      fi
+ 		done
+  fi
+  if [ "$aap_prefonly" = "0" ]; then # do not scan if only looking for preferred networks
+	 while read scanLine; do
 		lineID=$(expr substr "$scanLine" 1 4)
 		case "$lineID" in
 				'SSID')
@@ -332,11 +328,13 @@ aap_scanman ()
 				'BSSI')
 						cBSSID=`echo $scanLine | awk '{ print \$2 }'`
 							for j in $aap_ignmacs; do 
-								if [ "$cBSSID" = "$j" ] || [ $net_type = "ignore" ]; then 
-									aaplog 4 scanman - Ignoring SSID $cSSID with remote BSSID $cBSSID per user request.
-                  net_type="open"
-                  continue 2 
-								fi; done; 
+							  [ "$cBSSID" = "$j" ] && net_type="ignore"
+              done; 
+							if [ $net_type = "ignore" ]; then 
+								aaplog 4 scanman - Ignoring SSID $cSSID with remote BSSID $cBSSID per user request.
+                net_type="open"
+                continue
+							fi;
 						cMODES=$(echo "$scanLine" | sed s!BSSID.*bility..!!)
             net_type="open"
 						for k in $cMODES; do
@@ -360,16 +358,20 @@ aap_scanman ()
             fi
 				;;
 		esac
-	done < /tmp/aap.result
-	ap_dir_limit="$(ls -1 $aaptmpdir | wc -l)"
-	aap_joinpref
-  aaplog 4 joinpref - End of available APs.  Sleeping $aap_dhcpw
-  nvram set wl0_ssid=""
-  nvram set wl_ssid=""
-  sleep $aap_dhcpw
-	rm -f $aaptmpdir/* 2>/dev/null
-	firstRun=1
-	current_ap=1
+	 done < /tmp/aap.result
+	 ap_dir_limit="$(ls -1 $aaptmpdir | wc -l)"
+	 aap_joinpref
+   aaplog 4 joinpref - End of available APs.  Sleeping $aap_dhcpw
+   nvram set wl0_ssid=""
+   nvram set wl_ssid=""
+   sleep $aap_scanfreq
+	 rm -f $aaptmpdir/* 2>/dev/null
+	 firstRun=1
+	 current_ap=1
+  else
+		aaplog 2 scanman - End of preferred networks. Sleeping $aap_scanfreq
+    sleep $aap_scanfreq
+  fi
 }
 
 ## joinpref handles associating with an AP, 

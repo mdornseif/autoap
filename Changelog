@@ -4,6 +4,9 @@
  to the users internet connectivity.  This is especially useful in broad, city      
  scale areas with dense AP population.                                              
 
+2007-02-09 (mathilda)
+- only try to connect to preferred net if it got detected in scan
+
 2007-02-08 (mathilda)
 - wlReset function removed because obsolete
 - default logging is html
