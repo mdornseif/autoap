@@ -16,13 +16,13 @@
 ##  filed named LICENSE, or by visiting http://www.gnu.org/licenses/gpl.txt            ##
 ##                                                                                     ##
 #########################################################################################
-authstring="AutoAP, by JohnnyPrimus - lee@partners.biz - 2007-02-12 22:23 GMT"
+authstring="AutoAP, by JohnnyPrimus - lee@partners.biz - 2007-02-13 07:31 GMT"
 authstring2="Additional development by Mathilda and MarcJohnson"
 
 # Latest changes:
 #
-# 2007-02-12
-# - only try to connect to preferred net if it got detected in scan
+# 2007-02-13
+# - autoap_wepkeys now takes the same format as autoap_prefssid. Connecting to known networks with wep keys is much much faster! 
 
 ME=`basename $0`
 RUNNING=`ps | grep $ME | wc -l`
@@ -60,8 +60,10 @@ aap_logger="html"
 
 ######  WEP Keys
 ######  Space seperated list of wep keys to try
-##  Currenly only supports 10 digit hex keys.  Others may work, untested.
 ##  nvram set autoap_wepkeys="00134A3BF2 5B8CE1B462 AAA1234567" 
+## to. Spaces are replaced by stars, a wep-key is attached with a separating "*key*"#
+## spaces in the SSIDs have to be replaced by *s                                    #
+## nvram set autoap_wepkeys="ssid1*with*spaces*key*123234234abba ssid2*key*12345ab" # 
 ##
 aap_wepkeys=""
 [ -n "$(nvram get autoap_wepkeys)" ] && aap_wepkeys="$(nvram get autoap_wepkeys)";
@@ -294,7 +296,6 @@ aap_scanman ()
       cSSID="$(echo "$n" | sed "s/\(.*\)\*key\*.*/\1/" | sed 's/*/ /g')"
       wlkey="$(echo "$n" | grep \*key\* | sed "s/.*\*key\*\(.*\)/\1/")"
       is_there="$(cat /tmp/aap.result | grep "$cSSID" )"
- 			  aaplog 4 scanman - is_there: $is_there is online.
       if [ -n "$is_there" ]; then # got the network detected at all?
    			aaplog 4 scanman - Trying to join preferred network $cSSID.
         nvram set wl0_ssid="$cSSID"
@@ -390,8 +391,6 @@ aap_joinpref ()
     fi
     aaplog 4 joinpref - Moving to network $current_ap \($tPref\). 
     current_ap=$(($current_ap + 1))
-    nvram set wl0_ssid="$tPref"
-    nvram set wl_ssid="$tPref"
     nvram set wan_ipaddr="0.0.0.0"
     nvram set wan_netmask="0.0.0.0"
     nvram set wan_gateway="0.0.0.0"
@@ -399,23 +398,27 @@ aap_joinpref ()
     nvram set wan_lease="0"
     rm /tmp/get_lease_time
     rm /tmp/lease_time
+    wlkey=""
 		if [ "$wepnet" = "1" ]; then
-      for wlkey in $aap_wepkeys; do
-			  aajoin "$tPref"  $wlkey 
-        [ -n "$(ip route | awk '/default via/ {print $3}')" ] && break # found good key
-      done
-      if [ -n "$(ip route | awk '/default via/ {print $3}')" ]; then
-		    aaplog 5 joinpref - found matching key, connecting ... 
-      else
-		    aaplog 5 joinpref - no matching key, moving to next network 
-        continue 
+ 		for n in $aap_wepkeys; do
+      cSSID="$(echo "$n" | sed "s/\(.*\)\*key\*.*/\1/" | sed 's/*/ /g')"
+      wlkey="$(echo "$n" | grep \*key\* | sed "s/.*\*key\*\(.*\)/\1/")"
+      if [ "$tPref" = "$cSSID" ]; then # do we have a key for this net?
+        nvram set wl0_ssid="$tPref"
+        nvram set wl_ssid="$tPref"
+		    aaplog 5 joinpref - We have a key for ${cSSID}, connecting ... 
+		    aajoin "$tPref" $wlkey
+ 			  aap_checkjoin "$cSSID" $wlkey
       fi
+ 		done
 		fi
 		if [ "$wepnet" = "0" ]; then
+      nvram set wl0_ssid="$tPref"
+      nvram set wl_ssid="$tPref"
       wl wsec 0 2>/dev/null
 			aajoin "$tPref"
     fi
-    aap_checkjoin "$tPref"
+    aap_checkjoin "$tPref" $wlkey
   done
 }
 
