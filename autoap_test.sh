@@ -16,13 +16,13 @@
 ##  filed named LICENSE, or by visiting http://www.gnu.org/licenses/gpl.txt            ##
 ##                                                                                     ##
 #########################################################################################
-authstring="AutoAP, by JohnnyPrimus - lee@partners.biz - 2007-02-13 07:31 GMT"
+authstring="AutoAP, by JohnnyPrimus - lee@partners.biz - 2007-02-15 07:29 GMT"
 authstring2="Additional development by Mathilda and MarcJohnson"
 
 # Latest changes:
 #
-# 2007-02-13
-# - autoap_wepkeys now takes the same format as autoap_prefssid. Connecting to known networks with wep keys is much much faster! 
+# 2007-02-15
+# - autoap_findwep now enabled by default (no penalty any more if wepkeys is empty)
 
 ME=`basename $0`
 RUNNING=`ps | grep $ME | wc -l`
@@ -40,20 +40,20 @@ rm -f /tmp/aap.result
 ##  nvram set autoap_findopen="1"
 ##  nvram set autoap_findwep="1"
 ##
-##  Note: If WEP is enabled you need to provide keys to connect with.
-##  AutoAP will try each key until one works.  If none work, it skips
-##  that network.
+##  Note: If WEP is enabled you need to provide SSID/key combinations to connect with.
+##  AutoAP will check if there is a key for the current SSID otherwise it moves on.
+##  There is no penalty having autoap_findwep enabled when autoap_wepkeys is empty
 ##
 aap_findopen="1"
-aap_findwep="0"
+aap_findwep="1"
 [ -n "$(nvram get autoap_findopen)" ] && aap_findopen="$(nvram get autoap_findopen)";
 [ -n "$(nvram get autoap_findwep)" ] && aap_findwep="$(nvram get autoap_findwep)";
 
 
-######  Logging.  Default is log to syslog.
+######  Logging.  Default is log to html.
 ######  AutoAP can log to syslog, or to a file. Valid options are
 ##  syslog, filename and html.  If html is selected, the log is
-##  available via web browser at http://routerip/autoap/log.html
+##  available via web browser at http://routerip/user/autoap.htm
 ##
 aap_logger="html"
 [ -n "$(nvram get autoap_logger)" ] && aap_logger="$(nvram get autoap_logger)";
@@ -73,10 +73,10 @@ if [ -n "$(nvram get autoap_wep1)" ]; then
  	[ -n "$(nvram get autoap_wep3)" ] && aap_wepkeys="${aap_wepkeys} $(nvram get autoap_wep3)";
 fi
 
-######  Max APs to track at once. Default 5
-##  nvram set autoap_aplimit="5"
+######  Max APs to track at once. Default 10
+##  nvram set autoap_aplimit="15"
 ##
-aap_aplimit="10"
+aap_aplimit="15"
 [ -n "$(nvram get autoap_aplimit)" ] && aap_aplimit="$(nvram get autoap_aplimit)";
 
 ######  Internet check toggle.  Set to 1 to enable, 0 to disable.  Default enabled.
