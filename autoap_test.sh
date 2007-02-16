@@ -21,8 +21,9 @@ authstring2="Additional development by Mathilda and MarcJohnson"
 
 # Latest changes:
 #
-# 2007-02-15
+# 2007-02-16
 # - autoap_findwep now enabled by default (no penalty any more if wepkeys is empty)
+# - oups, there was a glitch that slowed wep-connection down for some cases
 
 ME=`basename $0`
 RUNNING=`ps | grep $ME | wc -l`
@@ -417,8 +418,8 @@ aap_joinpref ()
       nvram set wl_ssid="$tPref"
       wl wsec 0 2>/dev/null
 			aajoin "$tPref"
+      aap_checkjoin "$tPref" $wlkey
     fi
-    aap_checkjoin "$tPref" $wlkey
   done
 }
 
