@@ -4,8 +4,10 @@
  to the users internet connectivity.  This is especially useful in broad, city      
  scale areas with dense AP population.                                              
 
-2007-02-15 (mathilda)
-- autoap_findwep now enabled by default (no penalty any more if wepkeys is empty)
+2007-02-16 (mathilda)
+- autoap_findwep now enabled by default (no penalty any more if autoap_wepkeys is empty)
+- oups, there was a glitch that slowed wep-connection down for some cases
+
 
 2007-02-13 (mathilda)
 - autoap_wepkeys now takes the same format as autoap_prefssid. Connecting to known networks with wep keys is much much faster! 
