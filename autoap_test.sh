@@ -16,14 +16,16 @@
 ##  filed named LICENSE, or by visiting http://www.gnu.org/licenses/gpl.txt            ##
 ##                                                                                     ##
 #########################################################################################
-authstring="AutoAP, by JohnnyPrimus - lee@partners.biz - 2007-02-15 07:29 GMT"
+authstring="AutoAP, by JohnnyPrimus - lee@partners.biz - 2007-02-17 10:54 GMT"
 authstring2="Additional development by Mathilda and MarcJohnson"
 
 # Latest changes:
 #
-# 2007-02-16
+# 2007-02-17
 # - autoap_findwep now enabled by default (no penalty any more if wepkeys is empty)
 # - oups, there was a glitch that slowed wep-connection down for some cases
+# - dynamical reload of nvram variables and new scan every 2 hours
+# - new nvram variable that permits immediate rescanning / refreshing of variables
 
 ME=`basename $0`
 RUNNING=`ps | grep $ME | wc -l`
@@ -37,6 +39,25 @@ rm -rf $aaptmpdir/*
 mkdir -p $aaptmpdir
 rm -f /tmp/aap.result
 
+
+aap_findopen="1"
+aap_findwep="1"
+aap_logger="html"
+aap_wepkeys=""
+aap_watch_inet="1";
+aap_aplimit="15"
+aap_chk_url="www.google.com";
+aap_dhcpw="15"
+aap_scanfreq="60"
+aap_logsize="1000"
+aap_prefonly="0"
+
+aap_varupdate ()
+{
+aaplog 3 aap_varupdate - rereading nvram variables.
+aap_refreshdelay="120"
+nvram set autoap_refreshnow=0
+
 ######  Search modes - WEP and Open.  Default is Open enabled and WEP disabled.
 ##  nvram set autoap_findopen="1"
 ##  nvram set autoap_findwep="1"
@@ -44,9 +65,7 @@ rm -f /tmp/aap.result
 ##  Note: If WEP is enabled you need to provide SSID/key combinations to connect with.
 ##  AutoAP will check if there is a key for the current SSID otherwise it moves on.
 ##  There is no penalty having autoap_findwep enabled when autoap_wepkeys is empty
-##
-aap_findopen="1"
-aap_findwep="1"
+
 [ -n "$(nvram get autoap_findopen)" ] && aap_findopen="$(nvram get autoap_findopen)";
 [ -n "$(nvram get autoap_findwep)" ] && aap_findwep="$(nvram get autoap_findwep)";
 
@@ -55,8 +74,7 @@ aap_findwep="1"
 ######  AutoAP can log to syslog, or to a file. Valid options are
 ##  syslog, filename and html.  If html is selected, the log is
 ##  available via web browser at http://routerip/user/autoap.htm
-##
-aap_logger="html"
+
 [ -n "$(nvram get autoap_logger)" ] && aap_logger="$(nvram get autoap_logger)";
 
 ######  WEP Keys
@@ -65,8 +83,7 @@ aap_logger="html"
 ## to. Spaces are replaced by stars, a wep-key is attached with a separating "*key*"#
 ## spaces in the SSIDs have to be replaced by *s                                    #
 ## nvram set autoap_wepkeys="ssid1*with*spaces*key*123234234abba ssid2*key*12345ab" # 
-##
-aap_wepkeys=""
+
 [ -n "$(nvram get autoap_wepkeys)" ] && aap_wepkeys="$(nvram get autoap_wepkeys)";
 if [ -n "$(nvram get autoap_wep1)" ]; then
  	aap_wepkeys="${aap_wepkeys} $(nvram get autoap_wep1)";
@@ -76,26 +93,22 @@ fi
 
 ######  Max APs to track at once. Default 10
 ##  nvram set autoap_aplimit="15"
-##
-aap_aplimit="15"
+
 [ -n "$(nvram get autoap_aplimit)" ] && aap_aplimit="$(nvram get autoap_aplimit)";
 
 ######  Internet check toggle.  Set to 1 to enable, 0 to disable.  Default enabled.
 ##  nvram set autoap_inet="1"
-##
-aap_watch_inet="1";
+
 [ -n "$(nvram get autoap_inet)" ] && aap_watch_inet="$(nvram get autoap_inet)";
 
 ######  Internet check URL.  The URL or IP to ping to ensure internet access.
 ##  nvram set autoap_ineturl="www.partners.biz"
-##
-aap_chk_url="www.google.com";
+
 [ -n "$(nvram get autoap_ineturl)" ] && aap_chk_url="$(nvram get autoap_ineturl)";
 
 ######  Length of time to wait for a DHCP request to succeed.  Default 15
 ##  nvram set autoap_dhcpw="15"
-##
-aap_dhcpw="15"
+
 [ -n "$(nvram get autoap_dhcpw)" ] && aap_dhcpw="$(nvram get autoap_dhcpw)";
 
 ######  Scan Frequency.  Default 60 Seconds
@@ -103,7 +116,6 @@ aap_dhcpw="15"
 ##  for new or improved signals.  This frequency
 ##  is only used when a signal has already been established.
 ##  When no connection is active, it is not used.
-aap_scanfreq="60"
 [ -n "$(nvram get autoap_scanfreq)" ] && aap_scanfreq="$(nvram get autoap_scanfreq)";
 
 ############### MAC/BSSID Ignore List ###################################
@@ -155,39 +167,20 @@ fi
 
 ######  Maximum number of lines of the logfile. Default 1000
 ##  nvram set autoap_logsize="1000"
-##
-aap_logsize="1000"
 [ -n "$(nvram get autoap_logsize)" ] && aap_logsize="$(nvram get autoap_logsize)";
 
 ###### True if only interested in preferred networks. Default false.
-aap_prefonly="0"
 [ -n "$(nvram get autoap_prefonly)" ] && aap_prefonly="$(nvram get autoap_prefonly)";
+
+###### True if only interested in preferred networks. Default false.
+[ -n "$(nvram get autoap_refreshdelay)" ] && aap_refreshdelay="$(nvram get autoap_refreshdelay)";
+nvram set autoap_refreshdelay=$aap_refreshdelay
+}
 
 ########## Misc. Utilities #############
 ## A number of utility functions needed
 ## by scanman, amongst others.
 
-case "$aap_logger" in
-		'syslog')
-			lc1="logger -p local7."
-			lc2=" -t autoap "
-			errredir="/dev/null"
-		;;
-		'html')
-			errredir="/tmp/autoap.log"
-			touch $errredir
-			ln -s $errredir /tmp/www/autoap.htm
-			echo "<html><head><title>AutoAP Log Data</title></head><body><h2>AutoAP Log Begin:</h2>" > $errredir 2>/dev/null
-		;;
-		*)
-			lc1="logger -s -p local7."
-			lc2=" -t autoap "
-			errredir="$aap_logger"
-			touch $errredir
-			echo "<pre>" > $aap_logger 2>/dev/null
-		;;
-esac
-		
 aaplog ()
 {
 	[ $# -gt 0 ] && p1="$1 " && shift;
@@ -245,6 +238,8 @@ cur_ssid=$(wl ssid|sed s/^.*:.\"//|sed s/\"$//)
 ##  Scanners, parsers, etc   
 ##	                        
 
+aap_varupdate # read nvram variables for the first time
+
 firstRun=1
 current_ap=1
 wl_mode=`wl ap | awk '{ print \$3 }'`
@@ -252,6 +247,27 @@ wl_if=`nvram get wl0_ifname`
 tPref=""
 wl wsec 0 2>/dev/null
 
+case "$aap_logger" in
+		'syslog')
+			lc1="logger -p local7."
+			lc2=" -t autoap "
+			errredir="/dev/null"
+		;;
+		'html')
+			errredir="/tmp/autoap.log"
+			touch $errredir
+			ln -s $errredir /tmp/www/autoap.htm
+			echo "<html><head><title>AutoAP Log Data</title></head><body><h2>AutoAP Log Begin:</h2>" > $errredir 2>/dev/null
+		;;
+		*)
+			lc1="logger -s -p local7."
+			lc2=" -t autoap "
+			errredir="$aap_logger"
+			touch $errredir
+			echo "<pre>" > $aap_logger 2>/dev/null
+		;;
+esac
+		
 aaplog 6 $authstring
 aaplog 6 $authstring2
 if [ "$aap_findwep" = "1" ]; then
@@ -363,7 +379,7 @@ aap_scanman ()
 	 done < /tmp/aap.result
 	 ap_dir_limit="$(ls -1 $aaptmpdir | wc -l)"
 	 aap_joinpref
-   aaplog 4 joinpref - End of available APs.  Sleeping $aap_dhcpw
+   aaplog 4 scanman - End of available APs.  Sleeping $aap_dhcpw
    nvram set wl0_ssid=""
    nvram set wl_ssid=""
    sleep $aap_scanfreq
@@ -420,6 +436,7 @@ aap_joinpref ()
 			aajoin "$tPref"
       aap_checkjoin "$tPref" $wlkey
     fi
+  [ "$aap_refreshdelay" -lt 0 ] && aap_varupdate && return 1 ; # reread nvram variables
   done
 }
 
@@ -429,6 +446,9 @@ aap_joinpref ()
 aap_checkjoin ()
 {
     req_ssid="$1"
+    [ "$(nvram get autoap_refreshnow)" -eq 0 ] || $aap_refreshdelay=0 ;
+    aap_refreshdelay=$(($aap_refreshdelay - 1))
+    [ "$aap_refreshdelay" -lt 0 ] && return 1 ;
 		wlip=$(nvram get wan_gateway)
 		if [ ! "$req_ssid" = "$cur_ssid" ] || [ $wlip = "0.0.0.0" ] ; then # see if join worked otherwise retry twice
 	    aaplog 3 checkjoin - Currently connected to "$cur_ssid", attempting to join "$req_ssid".
@@ -449,10 +469,13 @@ aap_checkjoin ()
       cur_ssid=$(wl ssid|sed s/^.*:.\"//|sed s/\"$//)
 	    if [ -n "$errredir" ] && [ $(cat $errredir | wc -l)  -gt $aap_logsize ]; then
         cp $errredir /tmp/tmplog
-        `echo head -n2 /tmp/tmplog` > $errredir 
+        `echo head -n3 /tmp/tmplog` > $errredir 
         tail -$(($aap_logsize *3/4)) "/tmp/tmplog" >> $errredir
         rm "/tmp/tmplog"
       fi
+      [ "$(nvram get autoap_refreshnow)" -eq 0 ] || $aap_refreshdelay=0 ;
+      aap_refreshdelay=$(($aap_refreshdelay - 1))
+      [ "$aap_refreshdelay" -lt 0 ] && return 1 ;
     done
 	  aaplog 3 checkjoin - Connection to ${cur_ssid} failed. Trying next AP.
 }
