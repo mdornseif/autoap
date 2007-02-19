@@ -1,13 +1,16 @@
-                                                                                    
+*************************************************************************************
  autoap is a small addition for the already robust DD-WRT firmware that enables    
  users to migrate through/over many different wireless hotspots with low impact   
  to the users internet connectivity.  This is especially useful in broad, city      
  scale areas with dense AP population.                                              
+*************************************************************************************
 
-2007-02-16 (mathilda)
-- autoap_findwep now enabled by default (no penalty any more if autoap_wepkeys is empty)
+2007-02-19 (mathilda)
+- autoap_findwep now enabled by default (no slowdown any more with wep enables)
 - oups, there was a glitch that slowed wep-connection down for some cases
-
+- dynamical reload of nvram variables and new scan every 2 hours
+- new nvram variable that permits immediate rescanning / refreshing of variables
+- small optimizations, cleanup
 
 2007-02-13 (mathilda)
 - autoap_wepkeys now takes the same format as autoap_prefssid. Connecting to known networks with wep keys is much much faster! 
