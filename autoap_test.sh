@@ -16,16 +16,17 @@
 ##  filed named LICENSE, or by visiting http://www.gnu.org/licenses/gpl.txt            ##
 ##                                                                                     ##
 #########################################################################################
-authstring="AutoAP, by JohnnyPrimus - lee@partners.biz - 2007-02-17 10:54 GMT"
+authstring="AutoAP, by JohnnyPrimus - lee@partners.biz - 2007-02-18 19:33 GMT"
 authstring2="Additional development by Mathilda and MarcJohnson"
 
 # Latest changes:
 #
-# 2007-02-17
-# - autoap_findwep now enabled by default (no penalty any more if wepkeys is empty)
+# 2007-02-19 (mathilda)
+# - autoap_findwep now enabled by default (no slowdown any more with wep enables)
 # - oups, there was a glitch that slowed wep-connection down for some cases
 # - dynamical reload of nvram variables and new scan every 2 hours
 # - new nvram variable that permits immediate rescanning / refreshing of variables
+# - small optimizations, cleanup
 
 ME=`basename $0`
 RUNNING=`ps | grep $ME | wc -l`
@@ -39,7 +40,7 @@ rm -rf $aaptmpdir/*
 mkdir -p $aaptmpdir
 rm -f /tmp/aap.result
 
-
+# these are the default values for the corresponding nvram variables.
 aap_findopen="1"
 aap_findwep="1"
 aap_logger="html"
@@ -54,132 +55,116 @@ aap_prefonly="0"
 
 aap_varupdate ()
 {
-aaplog 3 aap_varupdate - rereading nvram variables.
-aap_refreshdelay="120"
-nvram set autoap_refreshnow=0
+  aaplog 3 aap_varupdate - rereading nvram variables. > /dev/null 2>&1
+  aap_refreshdelay="120" # be default rescan about every 2 hours
+  nvram set autoap_refreshnow=0 # when enabled this variable can force a rescan
 
-######  Search modes - WEP and Open.  Default is Open enabled and WEP disabled.
-##  nvram set autoap_findopen="1"
-##  nvram set autoap_findwep="1"
-##
-##  Note: If WEP is enabled you need to provide SSID/key combinations to connect with.
-##  AutoAP will check if there is a key for the current SSID otherwise it moves on.
-##  There is no penalty having autoap_findwep enabled when autoap_wepkeys is empty
+  ######  Search modes - WEP and Open.  Default is Open enabled and WEP enabled.
+  ##  nvram set autoap_findopen="1"
+  ##  nvram set autoap_findwep="1"
+  ##  Note: If WEP is enabled you need to provide SSID/key combinations to connect with.
+  ##  AutoAP will check if there is a key for the current SSID otherwise it moves on.
+  ##  There is no penalty having autoap_findwep enabled when autoap_wepkeys is empty
+  [ -n "$(nvram get autoap_findopen)" ] && aap_findopen="$(nvram get autoap_findopen)";
+  [ -n "$(nvram get autoap_findwep)" ] && aap_findwep="$(nvram get autoap_findwep)";
 
-[ -n "$(nvram get autoap_findopen)" ] && aap_findopen="$(nvram get autoap_findopen)";
-[ -n "$(nvram get autoap_findwep)" ] && aap_findwep="$(nvram get autoap_findwep)";
+  ######  Logging.  Default is log to html.
+  ##  Valid option are 'syslog', 'filename' and 'html'.  If html is selected, the log is
+  ##  available via web browser at http://routerip/user/autoap.htm
+  [ -n "$(nvram get autoap_logger)" ] && aap_logger="$(nvram get autoap_logger)";
 
+  ######  Space seperated list of wep keys to try
+  ##  nvram set autoap_wepkeys="00134A3BF2 5B8CE1B462 AAA1234567" 
+  ## to. Spaces are replaced by stars, a wep-key is attached with a separating "*key*"#
+  ## spaces in the SSIDs have to be replaced by *s                                    #
+  ## nvram set autoap_wepkeys="ssid1*with*spaces*key*123234234abba ssid2*key*12345ab" # 
+  [ -n "$(nvram get autoap_wepkeys)" ] && aap_wepkeys="$(nvram get autoap_wepkeys)";
+  if [ -n "$(nvram get autoap_wep1)" ]; then
+ 	  aap_wepkeys="${aap_wepkeys} $(nvram get autoap_wep1)";
+   	[ -n "$(nvram get autoap_wep2)" ] && aap_wepkeys="${aap_wepkeys} $(nvram get autoap_wep2)";
+ 	  [ -n "$(nvram get autoap_wep3)" ] && aap_wepkeys="${aap_wepkeys} $(nvram get autoap_wep3)";
+  fi
 
-######  Logging.  Default is log to html.
-######  AutoAP can log to syslog, or to a file. Valid options are
-##  syslog, filename and html.  If html is selected, the log is
-##  available via web browser at http://routerip/user/autoap.htm
+  ######  Max APs to track at once. Default 10
+  ##  nvram set autoap_aplimit="15"
+  [ -n "$(nvram get autoap_aplimit)" ] && aap_aplimit="$(nvram get autoap_aplimit)";
 
-[ -n "$(nvram get autoap_logger)" ] && aap_logger="$(nvram get autoap_logger)";
+  ######  Internet check toggle.  Set to 1 to enable, 0 to disable.  Default enabled.
+  ##  nvram set autoap_inet="1"
+  [ -n "$(nvram get autoap_inet)" ] && aap_watch_inet="$(nvram get autoap_inet)";
 
-######  WEP Keys
-######  Space seperated list of wep keys to try
-##  nvram set autoap_wepkeys="00134A3BF2 5B8CE1B462 AAA1234567" 
-## to. Spaces are replaced by stars, a wep-key is attached with a separating "*key*"#
-## spaces in the SSIDs have to be replaced by *s                                    #
-## nvram set autoap_wepkeys="ssid1*with*spaces*key*123234234abba ssid2*key*12345ab" # 
+  ######  Internet check URL.  The URL or IP to ping to ensure internet access.
+  ##  nvram set autoap_ineturl="www.partners.biz"
+  [ -n "$(nvram get autoap_ineturl)" ] && aap_chk_url="$(nvram get autoap_ineturl)";
 
-[ -n "$(nvram get autoap_wepkeys)" ] && aap_wepkeys="$(nvram get autoap_wepkeys)";
-if [ -n "$(nvram get autoap_wep1)" ]; then
- 	aap_wepkeys="${aap_wepkeys} $(nvram get autoap_wep1)";
- 	[ -n "$(nvram get autoap_wep2)" ] && aap_wepkeys="${aap_wepkeys} $(nvram get autoap_wep2)";
- 	[ -n "$(nvram get autoap_wep3)" ] && aap_wepkeys="${aap_wepkeys} $(nvram get autoap_wep3)";
-fi
+  ######  Length of time to wait for a DHCP request to succeed.  Default 15
+  ##  nvram set autoap_dhcpw="15"
+  [ -n "$(nvram get autoap_dhcpw)" ] && aap_dhcpw="$(nvram get autoap_dhcpw)";
 
-######  Max APs to track at once. Default 10
-##  nvram set autoap_aplimit="15"
+  ######  Scan Frequency.  Default 60 Seconds
+  ##  The delay in seconds to wait between scanning
+  ##  for new or improved signals.  This frequency
+  ##  is only used when a signal has already been established.
+  ##  When no connection is active, it is not used.
+  [ -n "$(nvram get autoap_scanfreq)" ] && aap_scanfreq="$(nvram get autoap_scanfreq)";
 
-[ -n "$(nvram get autoap_aplimit)" ] && aap_aplimit="$(nvram get autoap_aplimit)";
+  ############### MAC/BSSID Ignore List ###################################
+  ## You can permanently store this setting in nvram, as a space          #
+  ## seperated list of MAC address you don't wish to connect with.        #
+  ## nvram set autoap_macfilter="00:11:22:33:44:55 AA:BB:CC:DD:EE:FF etc" #
+  ##   -see SSID ignore below.                                            #
+  #########################################################################
+  if [ -n "$(nvram get autoap_macfilter)" ]; then
+     aap_ignmacs="$(nvram get autoap_macfilter)";
+   	[ -n "$(nvram get autoap_mac1)" ] && aap_ignmacs="${aap_ignmacs} $(nvram get autoap_mac1)"
+   	[ -n "$(nvram get autoap_mac2)" ] && aap_ignmacs="${aap_ignmacs} $(nvram get autoap_mac2)"
+   	[ -n "$(nvram get autoap_mac3)" ] && aap_ignmacs="${aap_ignmacs} $(nvram get autoap_mac3)"
+   # for n in $aap_ignmacs; do
+   #   wl mac "$n"
+   # done
+   # wl macmode 1
+  fi
 
-######  Internet check toggle.  Set to 1 to enable, 0 to disable.  Default enabled.
-##  nvram set autoap_inet="1"
+  ############### SSID Ignore List ##########################################
+  ## Like the MAC filter, this is a space separated list stored in nvram,   # 
+  ## and will prevent autoap from connecting to any SSID you designate.     #
+  ## spaces in the SSIDs have to be replaced by *s                          #
+  ## nvram set autoap_ssidfilter="ssid1 ssid*with*spaces2 etc"              # 
+  ###########################################################################
+  [ -n "$(nvram get autoap_ssidfilter)" ] && aap_ignssid="$(nvram get autoap_ssidfilter)";
+  if [ -n "$(nvram get autoap_ssid1)" ]; then
+  	aap_ignssid="${aap_ignssid} $(nvram get autoap_ssid1)";
+ 	  [ -n "$(nvram get autoap_ssid2)" ] && aap_ignssid="${aap_ignssid} $(nvram get autoap_ssid2)"
+ 	  [ -n "$(nvram get autoap_ssid3)" ] && aap_ignssid="${aap_ignssid} $(nvram get autoap_ssid3)"
+  fi
 
-[ -n "$(nvram get autoap_inet)" ] && aap_watch_inet="$(nvram get autoap_inet)";
+  ############### SSID Prefer List ##########################################
+  ## Like the MAC filter, this is a space separated list stored in nvram,   # 
+  ## but with adverse effects. These are the preferred networks to connect  #
+  ## to. An eventual wep-key is attached with a separating "*key*"          #
+  ## spaces in the SSIDs have to be replaced by *s                          #
+  ## nvram set autoap_prefssid="ssid1*with*spaces ssid2_is_wep*key*12345ab" # 
+  ###########################################################################
+  [ -n "$(nvram get autoap_prefssid)" ] && aap_prefssid="$(nvram get autoap_prefssid)";
+  if [ -n "$(nvram get autoap_pref_1)" ]; then
+   	aap_prefssid="${aap_prefssid} $(nvram get autoap_pref_1)"
+ 	  [ -n "$(nvram get autoap_pref_2)" ] && aap_prefssid="${aap_prefssid} $(nvram get autoap_pref_2)"
+  fi
 
-######  Internet check URL.  The URL or IP to ping to ensure internet access.
-##  nvram set autoap_ineturl="www.partners.biz"
+  ######  Maximum number of lines of the logfile. Default 1000
+  ##  nvram set autoap_logsize="1000"
+  [ -n "$(nvram get autoap_logsize)" ] && aap_logsize="$(nvram get autoap_logsize)";
 
-[ -n "$(nvram get autoap_ineturl)" ] && aap_chk_url="$(nvram get autoap_ineturl)";
-
-######  Length of time to wait for a DHCP request to succeed.  Default 15
-##  nvram set autoap_dhcpw="15"
-
-[ -n "$(nvram get autoap_dhcpw)" ] && aap_dhcpw="$(nvram get autoap_dhcpw)";
-
-######  Scan Frequency.  Default 60 Seconds
-##  The delay in seconds to wait between scanning
-##  for new or improved signals.  This frequency
-##  is only used when a signal has already been established.
-##  When no connection is active, it is not used.
-[ -n "$(nvram get autoap_scanfreq)" ] && aap_scanfreq="$(nvram get autoap_scanfreq)";
-
-############### MAC/BSSID Ignore List ###################################
-## You can permanently store this setting in nvram, as a space          #
-## seperated list of MAC address you don't wish to connect with.        #
-## nvram set autoap_macfilter="00:11:22:33:44:55 AA:BB:CC:DD:EE:FF etc" #
-##   -see SSID ignore below.                                            #
-#########################################################################
-
-
-if [ -n "$(nvram get autoap_macfilter)" ]; then
-   aap_ignmacs="$(nvram get autoap_macfilter)";
- 	[ -n "$(nvram get autoap_mac1)" ] && aap_ignmacs="${aap_ignmacs} $(nvram get autoap_mac1)"
- 	[ -n "$(nvram get autoap_mac2)" ] && aap_ignmacs="${aap_ignmacs} $(nvram get autoap_mac2)"
- 	[ -n "$(nvram get autoap_mac3)" ] && aap_ignmacs="${aap_ignmacs} $(nvram get autoap_mac3)"
- # for n in $aap_ignmacs; do
- #   wl mac "$n"
- # done
- # wl macmode 1
-fi
-
-############### SSID Ignore List ##########################################
-## Like the MAC filter, this is a space separated list stored in nvram,   # 
-## and will prevent autoap from connecting to any SSID you designate.     #
-## spaces in the SSIDs have to be replaced by *s                          #
-## nvram set autoap_ssidfilter="ssid1 ssid*with*spaces2 etc"              # 
-##                                                                        #
-###########################################################################
-[ -n "$(nvram get autoap_ssidfilter)" ] && aap_ignssid="$(nvram get autoap_ssidfilter)";
- if [ -n "$(nvram get autoap_ssid1)" ]; then
- 	aap_ignssid="${aap_ignssid} $(nvram get autoap_ssid1)";
- 	[ -n "$(nvram get autoap_ssid2)" ] && aap_ignssid="${aap_ignssid} $(nvram get autoap_ssid2)"
- 	[ -n "$(nvram get autoap_ssid3)" ] && aap_ignssid="${aap_ignssid} $(nvram get autoap_ssid3)"
-fi
-
-############### SSID Prefer List ##########################################
-## Like the MAC filter, this is a space separated list stored in nvram,   # 
-## but with adverse effects. These are the preferred networks to connect  #
-## to. An eventual wep-key is attached with a separating "*key*"          #
-## spaces in the SSIDs have to be replaced by *s                          #
-## nvram set autoap_prefssid="ssid1*with*spaces ssid2_is_wep*key*12345ab" # 
-##                                                                        #
-###########################################################################
-[ -n "$(nvram get autoap_prefssid)" ] && aap_prefssid="$(nvram get autoap_prefssid)";
-if [ -n "$(nvram get autoap_pref_1)" ]; then
- 	aap_prefssid="${aap_prefssid} $(nvram get autoap_pref_1)"
- 	[ -n "$(nvram get autoap_pref_2)" ] && aap_prefssid="${aap_prefssid} $(nvram get autoap_pref_2)"
-fi
-
-######  Maximum number of lines of the logfile. Default 1000
-##  nvram set autoap_logsize="1000"
-[ -n "$(nvram get autoap_logsize)" ] && aap_logsize="$(nvram get autoap_logsize)";
-
-###### True if only interested in preferred networks. Default false.
-[ -n "$(nvram get autoap_prefonly)" ] && aap_prefonly="$(nvram get autoap_prefonly)";
-
-###### True if only interested in preferred networks. Default false.
-[ -n "$(nvram get autoap_refreshdelay)" ] && aap_refreshdelay="$(nvram get autoap_refreshdelay)";
-nvram set autoap_refreshdelay=$aap_refreshdelay
+  ###### True if only interested in preferred networks. Default false.
+  [ -n "$(nvram get autoap_prefonly)" ] && aap_prefonly="$(nvram get autoap_prefonly)";
+  
+  ###### True if only interested in preferred networks. Default false.
+  [ -n "$(nvram get autoap_refreshdelay)" ] && aap_refreshdelay="$(nvram get autoap_refreshdelay)";
+  nvram set autoap_refreshdelay=$aap_refreshdelay
 }
 
 ########## Misc. Utilities #############
-## A number of utility functions needed
-## by scanman, amongst others.
+## A number of utility functions 
 
 aaplog ()
 {
@@ -216,30 +201,25 @@ aaping ()
 # try to join a network: aajoin <network> [wepkey]
 aajoin ()
 {
-if [ -n "$2" ]; then 
-  aaplog 3 aajoin - Trying to connect to ${1}, with wep key ${2}.
-  wl join "$1" key "$2"
-else
-  aaplog 3 aajoin - Trying to connect to ${1}
-  wl join "$1"
-fi
-sleep 2
-#kill -USR1 `cat /tmp/var/run/udhcpc.pid` > /dev/null 2>&1 # this is not strong enough for recent builds.
-kill -USR2 `cat /tmp/var/run/udhcpc.pid` > /dev/null 2>&1
-killall udhcpc > /dev/null 2>&1
-udhcpc  -i eth1 -p /tmp/var/run/udhcpc.pid -s /tmp/udhcpc > /dev/null 2>&1 &
-sleep $aap_dhcpw
-cur_ssid=$(wl ssid|sed s/^.*:.\"//|sed s/\"$//)
+  if [ -n "$2" ]; then 
+    aaplog 3 aajoin - Trying to connect to ${1}, with wep key ${2}.
+    wl join "$1" key "$2"
+  else
+    aaplog 3 aajoin - Trying to connect to ${1}
+    wl join "$1"
+  fi
+  sleep 2
+  #kill -USR1 `cat /tmp/var/run/udhcpc.pid` > /dev/null 2>&1 # this is not strong enough for recent builds.
+  kill -USR2 `cat /tmp/var/run/udhcpc.pid` > /dev/null 2>&1
+  killall udhcpc > /dev/null 2>&1
+  udhcpc  -i eth1 -p /tmp/var/run/udhcpc.pid -s /tmp/udhcpc > /dev/null 2>&1 &
+  sleep $aap_dhcpw
+  cur_ssid=$(wl ssid|sed s/^.*:.\"//|sed s/\"$//)
   #aaplog 3 aajoin - GW: $(ip route | awk '/default via/ {print $3}'), SSID: ${cur_ssid}
-
 }
 
 ################### Start AutoAP ###########################
-##  Scanners, parsers, etc   
-##	                        
-
 aap_varupdate # read nvram variables for the first time
-
 firstRun=1
 current_ap=1
 wl_mode=`wl ap | awk '{ print \$3 }'`
@@ -270,18 +250,10 @@ esac
 		
 aaplog 6 $authstring
 aaplog 6 $authstring2
-if [ "$aap_findwep" = "1" ]; then
-	if [ "$aap_wepkeys" = "" ]; then
-		aaplog 4 WEP keys not provided.  Switching to open only mode.
-		aap_findwep=0
-		aap_findopen=1
-	fi
-fi
 if [ "$wl_mode" = "1" ]; then
 	aaplog 3 FATAL - Router is in AP mode.  Exiting.
 	exit 0
 fi
-
 if [ "$(nvram get wan_proto)" = "static" ]; then
 	aaplog 4 init_scan - Router is not in DHCP mode.  Setting DHCP mode.
 	nvram set wan_proto="dhcp"
@@ -299,8 +271,8 @@ aap_init_scan ()
 		  aap_scanman
 	  else
 		  aaplog 5 init_scan - Scan failed.  Retrying initial scan.
-		  sleep $aap_dhcpw
 	  fi
+		sleep $aap_dhcpw
 }
 
 ## Scanman performs all of the parsing and filter
@@ -319,12 +291,18 @@ aap_scanman ()
         nvram set wl_ssid="$cSSID"
         nvram set wan_gateway="0.0.0.0"
         wl wsec 0 2>/dev/null
-		    aajoin "$cSSID" $wlkey
  			  aap_checkjoin "$cSSID" $wlkey
+        if [ "$aap_refreshdelay" -lt 0 ]; then
+ 			  #if [ $(aap_checkjoin "$cSSID" $wlkey) -eq 1 ]; then
+          aap_varupdate # reread nvram variables
+          aaplog 4 joinpref - reloading variables, rescanning
+          return 1 ; 
+        fi
       else
  			  aaplog 4 scanman - Preferred network $cSSID is not online.
       fi
  		done
+		aaplog 2 scanman - End of preferred networks.
   fi
   if [ "$aap_prefonly" = "0" ]; then # do not scan if only looking for preferred networks
 	 while read scanLine; do
@@ -379,17 +357,12 @@ aap_scanman ()
 	 done < /tmp/aap.result
 	 ap_dir_limit="$(ls -1 $aaptmpdir | wc -l)"
 	 aap_joinpref
-   aaplog 4 scanman - End of available APs.  Sleeping $aap_dhcpw
-   nvram set wl0_ssid=""
-   nvram set wl_ssid=""
-   sleep $aap_scanfreq
-	 rm -f $aaptmpdir/* 2>/dev/null
-	 firstRun=1
 	 current_ap=1
-  else
-		aaplog 2 scanman - End of preferred networks. Sleeping $aap_scanfreq
-    sleep $aap_scanfreq
   fi
+  nvram set wl0_ssid=""
+  nvram set wl_ssid=""
+	rm -f $aaptmpdir/* 2>/dev/null
+	firstRun=1
 }
 
 ## joinpref handles associating with an AP, 
@@ -424,7 +397,6 @@ aap_joinpref ()
         nvram set wl0_ssid="$tPref"
         nvram set wl_ssid="$tPref"
 		    aaplog 5 joinpref - We have a key for ${cSSID}, connecting ... 
-		    aajoin "$tPref" $wlkey
  			  aap_checkjoin "$cSSID" $wlkey
       fi
  		done
@@ -433,10 +405,13 @@ aap_joinpref ()
       nvram set wl0_ssid="$tPref"
       nvram set wl_ssid="$tPref"
       wl wsec 0 2>/dev/null
-			aajoin "$tPref"
-      aap_checkjoin "$tPref" $wlkey
+      aap_checkjoin "$tPref" 
     fi
-  [ "$aap_refreshdelay" -lt 0 ] && aap_varupdate && return 1 ; # reread nvram variables
+    if [ "$aap_refreshdelay" -lt 0 ]; then
+      aap_varupdate # reread nvram variables
+      aaplog 4 joinpref - reloading variables, rescanning
+      return 1 ; 
+    fi
   done
 }
 
@@ -446,7 +421,7 @@ aap_joinpref ()
 aap_checkjoin ()
 {
     req_ssid="$1"
-    [ "$(nvram get autoap_refreshnow)" -eq 0 ] || $aap_refreshdelay=0 ;
+    [ "$(nvram get autoap_refreshnow)" -eq 1 ] && aap_refreshdelay=0 ;
     aap_refreshdelay=$(($aap_refreshdelay - 1))
     [ "$aap_refreshdelay" -lt 0 ] && return 1 ;
 		wlip=$(nvram get wan_gateway)
@@ -462,7 +437,11 @@ aap_checkjoin ()
 		if [ "$req_ssid" = "$cur_ssid" ] ; then 
       ap_good=$(aap_inet_chk)
     fi
+		wlip=$(nvram get wan_gateway)
     while [ "$ap_good" = "1" ]; do # looping here until connection is lost
+      [ "$(nvram get autoap_refreshnow)" -eq 1 ] && aap_refreshdelay=0 ;
+      aap_refreshdelay=$(($aap_refreshdelay - 1))
+      [ "$aap_refreshdelay" -lt 0 ] && return 1 ;
       aaplog 3 checkjoin - Connection to ${cur_ssid} with GW ${wlip} confirmed. Sleeping ${aap_scanfreq} seconds.
       sleep $aap_scanfreq
       ap_good=$(aap_inet_chk)
@@ -473,9 +452,6 @@ aap_checkjoin ()
         tail -$(($aap_logsize *3/4)) "/tmp/tmplog" >> $errredir
         rm "/tmp/tmplog"
       fi
-      [ "$(nvram get autoap_refreshnow)" -eq 0 ] || $aap_refreshdelay=0 ;
-      aap_refreshdelay=$(($aap_refreshdelay - 1))
-      [ "$aap_refreshdelay" -lt 0 ] && return 1 ;
     done
 	  aaplog 3 checkjoin - Connection to ${cur_ssid} failed. Trying next AP.
 }
